@@ -4,6 +4,7 @@
 <head>
     <title>Chrome Bookmarks Sync</title>
     <link rel="stylesheet" href="css/popup.css">
+    <script src="js/popup.js"></script>
 </head>
 
 <body>
@@ -25,20 +26,20 @@
             </div>
             <div class="row">
                 <label for="tokenInput">Access Token</label>
-                <input type="password" id="tokenInput" class="input" placeholder="Personal Access Tokens" />
+                <input type="password" id="tokenInput" class="input" placeholder="Gitee Access Tokens" />
             </div>
             <div class="row">
                 <label for="repoInput">Repository Name</label>
                 <input type="text" id="repoInput" class="input" placeholder="MyRepo" />
             </div>
-            <div class="tip" id="tipDiv" style="display:none;">error!</div>
             <div class="row">
                 <label for=""></label>
                 <div class="checkbox"><span>Remeber Me</span>&emsp;<input type="checkbox" id="remeberCheckbox"/></div>
             </div>
+            <div class="tip" id="tipDiv" style="display: none;">error!</div>
             <div class="row">
-                <label for=""></label>
-                <button class="btn" id="syncBtn">Sync</button>
+                <button class="btn primary" id="startSyncBtn">Start Sync</button>
+                <button class="btn" id="stopSyncBtn">Stop Sync</button>
             </div>
         </div>
 

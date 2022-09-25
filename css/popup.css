@@ -42,7 +42,6 @@ body {
 
 .row .checkbox {
     height: 30px;
-    padding-top: 20px;
 }
 
 .input.error {
@@ -51,23 +50,35 @@ body {
 
 .tip {
     position: absolute;
-    margin: 10px 0 0 100px;
+    margin: 0 0 0 100px;
     color: #c00;
     font-size: 12px;
 }
 
 .btn {
     float: left;
-    border: solid 1px #0883d0;
+    border: solid 1px #ccc;
     height: 30px;
     line-height: 30px;
     width: 90px;
     text-align: center;
-    color: #fff;
-    background: #0883d0;
+    color: #000;
+    background: #fff;
+    margin-left: 35px;
 }
 
 .btn:hover {
+    border: solid 1px #ccc;
+    background: #ccc;
+}
+
+.btn.primary {
+    border: solid 1px #0883d0;
+    background: #0883d0;
+    color: #fff;
+}
+
+.btn.primary:hover {
     border: solid 1px #045180;
     background: #045180;
 }
