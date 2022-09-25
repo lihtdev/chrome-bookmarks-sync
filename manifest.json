@@ -1,0 +1,23 @@
+{
+    "name": "书签同步助手",
+    "description": "书签同步助手",
+    "version": "1.0",
+    "manifest_version": 3,
+    "background": {
+        "service_worker": "js/background.js"
+    },
+    "permissions": [
+        "storage",
+        "bookmarks"
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": "images/bookmark.png"
+    },
+    "icons": {
+        "16": "images/bookmark.png",
+        "32": "images/bookmark.png",
+        "48": "images/bookmark.png",
+        "128": "images/bookmark.png"
+    }
+}

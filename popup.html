@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <title>Chrome Bookmarks Sync</title>
+    <link rel="stylesheet" href="css/popup.css">
+</head>
+
+<body>
+    <div class="loading-wrap" id="loadingDiv" style="display:none;">
+        <div class="loading">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="login" id="loginDiv">
+            <div class="row">
+                <label for="usernameInput">Username</label>
+                <input type="text" id="usernameInput" class="input" placeholder="Username" />
+            </div>
+            <div class="row">
+                <label for="tokenInput">Access Token</label>
+                <input type="password" id="tokenInput" class="input" placeholder="Personal Access Tokens" />
+            </div>
+            <div class="row">
+                <label for="repoInput">Repository Name</label>
+                <input type="text" id="repoInput" class="input" placeholder="MyRepo" />
+            </div>
+            <div class="tip" id="tipDiv" style="display:none;">error!</div>
+            <div class="row">
+                <label for=""></label>
+                <div class="checkbox"><span>Remeber Me</span>&emsp;<input type="checkbox" id="remeberCheckbox"/></div>
+            </div>
+            <div class="row">
+                <label for=""></label>
+                <button class="btn" id="syncBtn">Sync</button>
+            </div>
+        </div>
+
+        <div class="success" id="successDiv" style="display:none;">
+            <div class="icon-success"></div>
+            <div class="success-info" id="divSuccessInfo">Success</div>
+        </div>
+    </div>
+</body>
+
+</html>

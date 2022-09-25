@@ -1,0 +1,73 @@
+* {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, JetBrains Mono, Menlo, Consolas, Helvetica Neue, PingFang SC, Microsoft YaHei UI, Microsoft YaHei, Arial, sans-serif;
+    font-size: 14px;
+    color: #000;
+}
+
+.content {
+    width: 300px;
+    padding: 20px;
+    background: url(../images/gitee.svg) center center no-repeat #fff;
+    background-size: contain;
+}
+
+.login {}
+
+.row {
+    overflow: hidden;
+    margin: 20px 0 0 0;
+}
+
+.row label {
+    float: left;
+    width: 100px;
+    height: 30px;
+    line-height: 30px;
+}
+
+.row .input {
+    outline: none;
+    border: solid 1px #ccc;
+    float: left;
+    width: 158px;
+    height: 30px;
+    line-height: 30px;
+    padding: 0 10px;
+}
+
+.row .checkbox {
+    height: 30px;
+    padding-top: 20px;
+}
+
+.input.error {
+    border: solid 1px #c00;
+}
+
+.tip {
+    position: absolute;
+    margin: 10px 0 0 100px;
+    color: #c00;
+    font-size: 12px;
+}
+
+.btn {
+    float: left;
+    border: solid 1px #0883d0;
+    height: 30px;
+    line-height: 30px;
+    width: 90px;
+    text-align: center;
+    color: #fff;
+    background: #0883d0;
+}
+
+.btn:hover {
+    border: solid 1px #045180;
+    background: #045180;
+}
