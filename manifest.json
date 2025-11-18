@@ -1,6 +1,6 @@
 {
     "name": "书签同步助手",
-    "description": "书签同步助手",
+    "description": "将书签同步到云端存储",
     "version": "1.0",
     "manifest_version": 3,
     "background": {

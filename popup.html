@@ -2,50 +2,53 @@
 <html lang="zh-CN">
 
 <head>
-    <title>Chrome Bookmarks Sync</title>
+    <meta charset="UTF-8">
+    <title>书签同步助手</title>
     <link rel="stylesheet" href="css/popup.css">
     <script src="js/popup.js"></script>
 </head>
 
 <body>
-    <div class="loading-wrap" id="loadingDiv" style="display:none;">
-        <div class="loading">
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-        </div>
-    </div>
-
     <div class="content">
-        <div class="login" id="loginDiv">
-            <div class="row">
-                <label for="usernameInput">Username</label>
-                <input type="text" id="usernameInput" class="input" placeholder="Username" />
-            </div>
-            <div class="row">
-                <label for="tokenInput">Access Token</label>
-                <input type="password" id="tokenInput" class="input" placeholder="Gitee Access Tokens" />
-            </div>
-            <div class="row">
-                <label for="repoInput">Repository Name</label>
-                <input type="text" id="repoInput" class="input" placeholder="MyRepo" />
-            </div>
-            <div class="row">
-                <label for=""></label>
-                <div class="checkbox"><span>Remeber Me</span>&emsp;<input type="checkbox" id="remeberCheckbox"/></div>
-            </div>
-            <div class="tip" id="tipDiv" style="display: none;">error!</div>
-            <div class="row">
-                <button class="btn primary" id="startSyncBtn">Start Sync</button>
-                <button class="btn" id="stopSyncBtn">Stop Sync</button>
-            </div>
+        <div class="tab active-tab" id="login-tab">
+            <form>
+                <div class="row">
+                    <label for="client-id-input">Client ID</label>
+                    <input type="text" id="client-id-input" class="input" placeholder="Gitee Client ID" />
+                </div>
+                <div class="row">
+                    <label for="client-secret-input">Client Secret</label>
+                    <input type="password" id="client-secret-input" class="input" placeholder="Gitee Client Secret" />
+                </div>
+                <div class="row">
+                    <label for="repo-input">仓库名称</label>
+                    <input type="text" id="repo-input" class="input" placeholder="Gitee 仓库名称" />
+                </div>
+                <div class="status" id="login-status"></div>
+                <div class="row">
+                    <button class="btn primary" type="button" id="login-btn">登录</button>
+                    <button class="btn" type="reset">重置</button>
+                </div>
+            </form>
         </div>
-
-        <div class="success" id="successDiv" style="display:none;">
-            <div class="icon-success"></div>
-            <div class="success-info" id="divSuccessInfo">Success</div>
+        <div class="tab" id="sync-tab">
+            <div class="row">
+                <label>用户名</label>
+                <span class="text-span" id="user-name-span"></span>
+            </div>
+            <div class="row">
+                <label>仓库名称</label>
+                <span class="text-span" id="repo-name-span"></span>
+            </div>
+            <div class="row">
+                <label>最后同步时间：</label>
+                <span class="text-span" id="last-sync-time-span"></span>
+            </div>
+            <div class="status" id="sync-status"></div>
+            <div class="row">
+                <button class="btn primary" id="start-sync-btn">立即同步</button>
+                <button class="btn" id="logout-btn">退出登录</button>
+            </div>
         </div>
     </div>
 </body>

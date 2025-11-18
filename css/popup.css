@@ -16,7 +16,13 @@ body {
     background-size: contain;
 }
 
-.login {}
+.tab {
+    display: none;
+}
+
+.tab.active-tab {
+    display: block;
+}
 
 .row {
     overflow: hidden;
@@ -40,8 +46,32 @@ body {
     padding: 0 10px;
 }
 
-.row .checkbox {
+.row .text-span {
+    float: left;
+    width: 158px;
     height: 30px;
+    line-height: 30px;
+    padding: 0 10px;
+}
+
+.status {
+    width: 300px;
+    height: 20px;
+    margin-top: 10px;
+    text-align: center;
+    font-size: 12px;
+}
+
+.status.info {
+    color: gray;
+}
+
+.status.success {
+    color: green;
+}
+
+.status.error {
+    color: red;
 }
 
 .input.error {
