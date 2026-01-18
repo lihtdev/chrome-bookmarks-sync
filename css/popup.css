@@ -10,7 +10,7 @@ body {
 }
 
 .content {
-    width: 300px;
+    width: 320px;
     padding: 20px;
     background: url(../images/gitee.svg) center center no-repeat #fff;
     background-size: contain;
@@ -34,6 +34,8 @@ body {
     width: 100px;
     height: 30px;
     line-height: 30px;
+    text-align: right;
+    padding-right: 10px;
 }
 
 .row .input {
@@ -94,7 +96,7 @@ body {
     text-align: center;
     color: #000;
     background: #fff;
-    margin-left: 35px;
+    margin-left: 45px;
 }
 
 .btn:hover {
@@ -111,4 +113,36 @@ body {
 .btn.primary:hover {
     border: solid 1px #045180;
     background: #045180;
+}
+
+/* 用户信息区域 */
+.user-info {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+/* 用户详情 */
+.user-details {
+    flex: 1;
+}
+
+/* 同步状态区域 */
+.sync-status {
+    background-color: #f5f5f5;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 20px 0;
+}
+
+/* 红色文本 */
+.text-span.red {
+    color: #ff0000;
+    font-weight: bold;
+}
+
+/* 绿色文本 */
+.text-span.green {
+    color: #00ff00;
+    font-weight: bold;
 }

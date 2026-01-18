@@ -24,12 +24,16 @@ async function init() {
         
         // 更新用户信息
         document.getElementById('user-name-span').textContent = storageData.giteeAuth.userName;
+        document.getElementById('name-span').textContent = storageData.giteeAuth.name;
         document.getElementById('repo-name-span').textContent = storageData.giteeAuth.repo;
         
         // 更新最后同步时间
         if (storageData.lastSyncTime) {
             document.getElementById('last-sync-time-span').textContent = formatDate(storageData.lastSyncTime);
         }
+        
+        // 更新书签数量
+        await updateBookmarkCounts();
     }
 }
 
@@ -100,7 +104,9 @@ async function login() {
                 clientSecret: clientSecret,
                 repo: repo,
                 token: tokenResponse.access_token,
-                userName: userInfo.login
+                userName: userInfo.login,
+                avatarUrl: userInfo.avatar_url,
+                name: userInfo.name
             }
         });
         
@@ -110,6 +116,7 @@ async function login() {
         
         // 更新用户信息
         document.getElementById('user-name-span').textContent = userInfo.login;
+        document.getElementById('name-span').textContent = userInfo.name;
         document.getElementById('repo-name-span').textContent = repo;
         
         // 更新徽章
@@ -196,6 +203,9 @@ async function syncBookmarks() {
         // 更新徽章
         chrome.runtime.sendMessage({ action: 'updateBadge' });
         
+        // 更新书签数量显示
+        await updateBookmarkCounts();
+        
         showStatus('sync', '同步成功！', 'success');
     } catch (error) {
         showStatus('sync', '同步失败: ' + error.message, 'error');
@@ -241,6 +251,9 @@ async function getBookmarksFromCloud() {
         // 更新徽章
         chrome.runtime.sendMessage({ action: 'updateBadge' });
         
+        // 更新书签数量显示
+        await updateBookmarkCounts();
+        
         showStatus('sync', '从云端获取书签成功！', 'success');
         return cloudBookmarks;
     } catch (error) {
@@ -269,6 +282,84 @@ function calculateBookmarksHash(bookmarks) {
         hash = hash & hash; // Convert to 32bit integer
     }
     return Math.abs(hash).toString();
+}
+
+// 计算书签数量
+function countBookmarks(bookmarks) {
+    let count = 0;
+    
+    function traverse(node) {
+        if (node.children) {
+            for (const child of node.children) {
+                traverse(child);
+            }
+        } else {
+            count++;
+        }
+    }
+    
+    traverse(bookmarks);
+    return count;
+}
+
+// 比较两个书签树，返回差异数量
+function compareBookmarks(localBookmarks, cloudBookmarks) {
+    // 简单实现：比较书签数量差异
+    // 更复杂的实现可以比较每个书签的具体内容
+    const localCount = countBookmarks(localBookmarks);
+    const cloudCount = countBookmarks(cloudBookmarks);
+    
+    return Math.abs(localCount - cloudCount);
+}
+
+// 更新书签数量显示
+async function updateBookmarkCounts() {
+    try {
+        // 获取登录信息
+        const storageData = await chrome.storage.local.get(['giteeAuth']);
+        if (!storageData.giteeAuth) {
+            return;
+        }
+        
+        const giteeAuth = storageData.giteeAuth;
+        
+        // 创建 GiteeAPI 实例
+        const giteeApi = new GiteeAPI(giteeAuth.clientId, giteeAuth.clientSecret, giteeAuth.repo);
+        giteeApi.setToken(giteeAuth.token);
+        
+        // 获取当前本地书签
+        const bookmarks = await chrome.bookmarks.getTree();
+        const localBookmarksBar = retrieveBookmarksBar(bookmarks);
+        
+        // 获取云端书签
+        const cloudBookmarks = await giteeApi.getBookmarks(giteeAuth.userName, giteeAuth.repo);
+        
+        // 计算差异数量
+        let cloudChangesCount = 0;
+        let localChangesCount = 0;
+        
+        if (cloudBookmarks) {
+            // 计算本地和云端的哈希值
+            const localHash = calculateBookmarksHash(localBookmarksBar);
+            const cloudHash = calculateBookmarksHash(cloudBookmarks);
+            
+            // 如果哈希值不同，说明有差异
+            if (localHash !== cloudHash) {
+                // 计算差异数量
+                const diffCount = compareBookmarks(localBookmarksBar, cloudBookmarks);
+                
+                // 更新显示
+                cloudChangesCount = diffCount;
+                localChangesCount = diffCount;
+            }
+        }
+        
+        // 更新页面显示
+        document.getElementById('cloud-changes-count').textContent = cloudChangesCount;
+        document.getElementById('local-changes-count').textContent = localChangesCount;
+    } catch (error) {
+        console.error('更新书签数量失败：', error);
+    }
 }
 
 // 获取书签栏数据

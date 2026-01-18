@@ -33,18 +33,40 @@
             </form>
         </div>
         <div class="tab" id="sync-tab">
-            <div class="row">
-                <label>用户名</label>
-                <span class="text-span" id="user-name-span"></span>
+            <!-- 用户信息区域 -->
+            <div class="user-info">
+                <div class="user-details">
+                    <div class="row">
+                        <label>昵称：</label>
+                        <span class="text-span" id="name-span"></span>
+                    </div>
+                    <div class="row">
+                        <label>用户名：</label>
+                        <span class="text-span" id="user-name-span"></span>
+                    </div>
+                    <div class="row">
+                        <label>仓库名称：</label>
+                        <span class="text-span" id="repo-name-span"></span>
+                    </div>
+                    <div class="row">
+                        <label>最后同步时间：</label>
+                        <span class="text-span" id="last-sync-time-span"></span>
+                    </div>
+                </div>
             </div>
-            <div class="row">
-                <label>仓库名称</label>
-                <span class="text-span" id="repo-name-span"></span>
+            
+            <!-- 书签数量展示 -->
+            <div class="sync-status">
+                <div class="row">
+                    <label>未更新到本地：</label>
+                    <span class="text-span red" id="cloud-changes-count">0</span>
+                </div>
+                <div class="row">
+                    <label>未推送到云端：</label>
+                    <span class="text-span green" id="local-changes-count">0</span>
+                </div>
             </div>
-            <div class="row">
-                <label>最后同步时间：</label>
-                <span class="text-span" id="last-sync-time-span"></span>
-            </div>
+            
             <div class="status" id="sync-status"></div>
             <div class="row">
                 <button class="btn primary" id="start-sync-btn">立即同步</button>
