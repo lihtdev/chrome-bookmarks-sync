@@ -26,7 +26,7 @@ body {
 
 .row {
     overflow: hidden;
-    margin: 20px 0 0 0;
+    margin: 10px 0 0 0;
 }
 
 .row label {
@@ -145,4 +145,27 @@ body {
 .text-span.green {
     color: #00ff00;
     font-weight: bold;
+}
+
+/* 顶部用户头像 */
+.top-avatar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+/* 用户头像 */
+.avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e0e0e0;
+    display: none; /* 默认隐藏 */
+}
+
+/* 显示头像 */
+.avatar.show {
+    display: block;
 }

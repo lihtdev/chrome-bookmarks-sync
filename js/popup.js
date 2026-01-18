@@ -17,6 +17,8 @@ document.addEventListener('DOMContentLoaded', function() {
 async function init() {
     // 检查是否已登录
     const storageData = await chrome.storage.local.get(['giteeAuth', 'lastSyncTime']);
+    const avatar = document.getElementById('user-avatar');
+    
     if (storageData.giteeAuth) {
         // 已登录，切换到同步标签
         document.getElementById('login-tab').classList.remove('active-tab');
@@ -27,6 +29,12 @@ async function init() {
         document.getElementById('name-span').textContent = storageData.giteeAuth.name;
         document.getElementById('repo-name-span').textContent = storageData.giteeAuth.repo;
         
+        // 更新用户头像
+        if (storageData.giteeAuth.avatarUrl) {
+            avatar.src = storageData.giteeAuth.avatarUrl;
+            avatar.classList.add('show');
+        }
+        
         // 更新最后同步时间
         if (storageData.lastSyncTime) {
             document.getElementById('last-sync-time-span').textContent = formatDate(storageData.lastSyncTime);
@@ -34,6 +42,9 @@ async function init() {
         
         // 更新书签数量
         await updateBookmarkCounts();
+    } else {
+        // 未登录，隐藏头像
+        avatar.classList.remove('show');
     }
 }
 
@@ -119,8 +130,16 @@ async function login() {
         document.getElementById('name-span').textContent = userInfo.name;
         document.getElementById('repo-name-span').textContent = repo;
         
+        // 更新用户头像
+        const avatar = document.getElementById('user-avatar');
+        avatar.src = userInfo.avatar_url;
+        avatar.classList.add('show');
+        
         // 更新徽章
         chrome.runtime.sendMessage({ action: 'updateBadge' });
+        
+        // 更新书签数量
+        await updateBookmarkCounts();
         
         showStatus('login', '登录成功', 'success');
     } catch (error) {
@@ -143,6 +162,10 @@ async function logout() {
         document.getElementById('client-id-input').value = '';
         document.getElementById('client-secret-input').value = '';
         document.getElementById('repo-input').value = '';
+        
+        // 隐藏用户头像
+        const avatar = document.getElementById('user-avatar');
+        avatar.classList.remove('show');
         
         // 清除徽章
         await chrome.action.setBadgeText({ text: '' });
