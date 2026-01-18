@@ -8,7 +8,8 @@
     },
     "permissions": [
         "storage",
-        "bookmarks"
+        "bookmarks",
+        "identity"
     ],
     "action": {
         "default_popup": "popup.html",
