@@ -5,6 +5,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // 绑定搜索事件
     document.getElementById('search-input').addEventListener('input', handleSearch);
 
+    // 绑定展开/折叠全部按钮
+    document.getElementById('expand-all').addEventListener('click', expandAll);
+    document.getElementById('collapse-all').addEventListener('click', collapseAll);
+
     // 加载书签
     loadAndRenderBookmarks();
 });
@@ -139,12 +143,36 @@ function renderTreeNode(node, highlightKeyword = '') {
     const nodeContent = document.createElement('div');
     nodeContent.className = 'tree-node-content';
 
+    // 名称
+    const nameSpan = document.createElement('span');
+    let displayTitle = node.title || '书签栏';
+
+    // 先创建子容器（这样事件绑定时就能正确引用）
+    let childrenContainer = null;
+    let icon = null;
+
+    if (hasChildren) {
+        childrenContainer = document.createElement('div');
+        childrenContainer.className = 'tree-children';
+
+        // 如果是搜索结果，默认折叠
+        if (highlightKeyword) {
+            childrenContainer.classList.add('collapsed');
+        }
+    }
+
     // 图标（展开/折叠指示器）
-    const icon = document.createElement('span');
+    icon = document.createElement('span');
     icon.className = 'tree-icon';
 
     if (hasChildren) {
         icon.textContent = '▼';
+
+        // 如果是搜索结果，默认折叠
+        if (highlightKeyword) {
+            icon.classList.add('collapsed');
+        }
+
         icon.addEventListener('click', () => {
             icon.classList.toggle('collapsed');
             childrenContainer.classList.toggle('collapsed');
@@ -153,10 +181,6 @@ function renderTreeNode(node, highlightKeyword = '') {
         icon.classList.add('hidden');
     }
 
-    // 名称
-    const nameSpan = document.createElement('span');
-    let displayTitle = node.title || '书签栏';
-
     if (isFolder) {
         nameSpan.className = 'folder-name';
         if (highlightKeyword) {
@@ -164,12 +188,12 @@ function renderTreeNode(node, highlightKeyword = '') {
         } else {
             nameSpan.textContent = displayTitle;
         }
-        nameSpan.addEventListener('click', () => {
-            if (hasChildren) {
+        if (hasChildren) {
+            nameSpan.addEventListener('click', () => {
                 icon.classList.toggle('collapsed');
                 childrenContainer.classList.toggle('collapsed');
-            }
-        });
+            });
+        }
     } else {
         nameSpan.className = 'bookmark-name';
         const link = document.createElement('a');
@@ -206,16 +230,7 @@ function renderTreeNode(node, highlightKeyword = '') {
     treeNode.appendChild(nodeContent);
 
     // 处理子节点
-    if (hasChildren) {
-        const childrenContainer = document.createElement('div');
-        childrenContainer.className = 'tree-children';
-
-        // 如果是搜索结果，默认展开全部
-        if (highlightKeyword) {
-            icon.classList.add('collapsed');
-            childrenContainer.classList.add('collapsed');
-        }
-
+    if (hasChildren && childrenContainer) {
         node.children.forEach(child => {
             const childNode = renderTreeNode(child, highlightKeyword);
             childrenContainer.appendChild(childNode);
@@ -271,4 +286,22 @@ function calculateBookmarksHash(bookmarks) {
         hash = hash & hash;
     }
     return Math.abs(hash).toString();
+}
+
+// 展开全部文件夹
+function expandAll() {
+    const allIcons = document.querySelectorAll('.tree-icon:not(.hidden)');
+    const allChildren = document.querySelectorAll('.tree-children');
+
+    allIcons.forEach(icon => icon.classList.remove('collapsed'));
+    allChildren.forEach(children => children.classList.remove('collapsed'));
+}
+
+// 折叠全部文件夹
+function collapseAll() {
+    const allIcons = document.querySelectorAll('.tree-icon:not(.hidden)');
+    const allChildren = document.querySelectorAll('.tree-children');
+
+    allIcons.forEach(icon => icon.classList.add('collapsed'));
+    allChildren.forEach(children => children.classList.add('collapsed'));
 }
