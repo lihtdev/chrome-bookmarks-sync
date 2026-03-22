@@ -5,10 +5,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 退出登录按钮
     document.getElementById('logout-btn').addEventListener('click', logout);
-    
+
     // 立即同步按钮
     document.getElementById('start-sync-btn').addEventListener('click', syncBookmarks);
-  
+
+    // 查看书签按钮
+    document.getElementById('view-bookmarks-btn').addEventListener('click', openBookmarksView);
+
     // 初始化页面
     init();
 });
@@ -424,4 +427,17 @@ function showStatus(type, message, level) {
             statusBar.className = 'status';
         }, 3000);
     }
+}
+
+// 打开新窗口查看书签
+function openBookmarksView() {
+    // 获取当前URL的基础路径
+    const url = chrome.runtime.getURL('bookmarks-view.html');
+    // 创建新窗口
+    chrome.windows.create({
+        url: url,
+        type: 'normal',
+        width: 960,
+        height: 700
+    });
 }

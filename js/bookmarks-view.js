@@ -1,0 +1,274 @@
+let originalBookmarks = null;
+let searchKeyword = '';
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 绑定搜索事件
+    document.getElementById('search-input').addEventListener('input', handleSearch);
+
+    // 加载书签
+    loadAndRenderBookmarks();
+});
+
+// 加载并渲染书签
+async function loadAndRenderBookmarks() {
+    try {
+        // 从chrome storage获取登录信息
+        const storageData = await chrome.storage.local.get(['giteeAuth']);
+        if (!storageData.giteeAuth) {
+            showError('未找到登录信息，请先在插件中登录');
+            return;
+        }
+
+        const giteeAuth = storageData.giteeAuth;
+
+        // 创建 GiteeAPI 实例
+        const giteeApi = new GiteeAPI(giteeAuth.clientId, giteeAuth.clientSecret, giteeAuth.repo);
+        giteeApi.setToken(giteeAuth.token);
+
+        // 从 Gitee 获取书签
+        const cloudBookmarks = await giteeApi.getBookmarks(giteeAuth.userName, giteeAuth.repo);
+
+        if (!cloudBookmarks) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('bookmarks-tree').innerHTML =
+                '<div class="bookmarks-empty">云端没有书签数据</div>';
+            document.getElementById('total-count').textContent = '0 个书签';
+            return;
+        }
+
+        // 保存原始书签数据用于搜索
+        originalBookmarks = cloudBookmarks;
+
+        // 统计书签数量
+        const totalBookmarks = countBookmarks(cloudBookmarks);
+        document.getElementById('total-count').textContent = `${totalBookmarks} 个书签`;
+
+        // 渲染书签树
+        document.getElementById('loading').style.display = 'none';
+        const treeContainer = document.getElementById('bookmarks-tree');
+        const treeRoot = renderTreeNode(cloudBookmarks);
+        treeContainer.appendChild(treeRoot);
+    } catch (error) {
+        console.error('加载书签失败:', error);
+        showError('加载失败: ' + error.message);
+    }
+}
+
+// 显示错误
+function showError(message) {
+    document.getElementById('loading').style.display = 'none';
+    const errorEl = document.getElementById('error');
+    errorEl.textContent = message;
+    errorEl.style.display = 'block';
+}
+
+// 处理搜索
+function handleSearch(e) {
+    searchKeyword = e.target.value.trim().toLowerCase();
+    renderFilteredBookmarks();
+}
+
+// 渲染过滤后的书签
+function renderFilteredBookmarks() {
+    const treeContainer = document.getElementById('bookmarks-tree');
+    treeContainer.innerHTML = '';
+
+    if (!originalBookmarks) {
+        return;
+    }
+
+    if (!searchKeyword) {
+        // 无关键词，渲染原始树
+        const treeRoot = renderTreeNode(originalBookmarks);
+        treeContainer.appendChild(treeRoot);
+        return;
+    }
+
+    // 搜索过滤
+    const filteredTree = filterBookmarks(originalBookmarks, searchKeyword);
+    if (!filteredTree || !filteredTree.children || filteredTree.children.length === 0) {
+        treeContainer.innerHTML = '<div class="bookmarks-empty">未找到匹配的书签</div>';
+        return;
+    }
+
+    const treeRoot = renderTreeNode(filteredTree, searchKeyword);
+    treeContainer.appendChild(treeRoot);
+}
+
+// 过滤书签（递归）
+function filterBookmarks(node, keyword) {
+    // 如果是书签，检查标题是否匹配
+    if (!node.children) {
+        if (node.title.toLowerCase().includes(keyword) ||
+            (node.url && node.url.toLowerCase().includes(keyword))) {
+            return { ...node };
+        }
+        return null;
+    }
+
+    // 如果是文件夹，递归过滤子节点
+    const filteredChildren = [];
+    if (node.children) {
+        for (const child of node.children) {
+            const filtered = filterBookmarks(child, keyword);
+            if (filtered) {
+                filteredChildren.push(filtered);
+            }
+        }
+    }
+
+    // 如果文件夹本身标题匹配，或者有匹配的子节点，保留这个文件夹
+    if (node.title.toLowerCase().includes(keyword) || filteredChildren.length > 0) {
+        return {
+            ...node,
+            children: filteredChildren
+        };
+    }
+
+    return null;
+}
+
+// 渲染单个树节点
+function renderTreeNode(node, highlightKeyword = '') {
+    const isFolder = !!node.children;
+    const hasChildren = isFolder && node.children.length > 0;
+
+    const treeNode = document.createElement('div');
+    treeNode.className = 'tree-node';
+
+    const nodeContent = document.createElement('div');
+    nodeContent.className = 'tree-node-content';
+
+    // 图标（展开/折叠指示器）
+    const icon = document.createElement('span');
+    icon.className = 'tree-icon';
+
+    if (hasChildren) {
+        icon.textContent = '▼';
+        icon.addEventListener('click', () => {
+            icon.classList.toggle('collapsed');
+            childrenContainer.classList.toggle('collapsed');
+        });
+    } else {
+        icon.classList.add('hidden');
+    }
+
+    // 名称
+    const nameSpan = document.createElement('span');
+    let displayTitle = node.title || '书签栏';
+
+    if (isFolder) {
+        nameSpan.className = 'folder-name';
+        if (highlightKeyword) {
+            nameSpan.innerHTML = highlightMatch(displayTitle, highlightKeyword);
+        } else {
+            nameSpan.textContent = displayTitle;
+        }
+        nameSpan.addEventListener('click', () => {
+            if (hasChildren) {
+                icon.classList.toggle('collapsed');
+                childrenContainer.classList.toggle('collapsed');
+            }
+        });
+    } else {
+        nameSpan.className = 'bookmark-name';
+        const link = document.createElement('a');
+        link.href = node.url;
+        link.target = '_blank';
+        if (highlightKeyword) {
+            link.innerHTML = highlightMatch(displayTitle, highlightKeyword);
+        } else {
+            link.textContent = displayTitle;
+        }
+        nameSpan.appendChild(link);
+    }
+
+    // URL显示
+    if (!isFolder && node.url) {
+        const urlSpan = document.createElement('span');
+        urlSpan.className = 'bookmark-url';
+        let displayUrl = node.url;
+        if (displayUrl.length > 60) {
+            displayUrl = displayUrl.substring(0, 60) + '...';
+        }
+        if (highlightKeyword) {
+            urlSpan.innerHTML = highlightMatch(displayUrl, highlightKeyword);
+        } else {
+            urlSpan.textContent = displayUrl;
+        }
+        nodeContent.appendChild(nameSpan);
+        nodeContent.appendChild(urlSpan);
+    } else {
+        nodeContent.appendChild(icon);
+        nodeContent.appendChild(nameSpan);
+    }
+
+    treeNode.appendChild(nodeContent);
+
+    // 处理子节点
+    if (hasChildren) {
+        const childrenContainer = document.createElement('div');
+        childrenContainer.className = 'tree-children';
+
+        // 如果是搜索结果，默认展开全部
+        if (highlightKeyword) {
+            icon.classList.add('collapsed');
+            childrenContainer.classList.add('collapsed');
+        }
+
+        node.children.forEach(child => {
+            const childNode = renderTreeNode(child, highlightKeyword);
+            childrenContainer.appendChild(childNode);
+        });
+
+        treeNode.appendChild(childrenContainer);
+    }
+
+    return treeNode;
+}
+
+// 高亮匹配的关键词
+function highlightMatch(text, keyword) {
+    if (!keyword) {
+        return text;
+    }
+    const regex = new RegExp(`(${keyword})`, 'gi');
+    return text.replace(regex, '<span class="highlight">$1</span>');
+}
+
+// 统计书签数量（排除文件夹）
+function countBookmarks(bookmarks) {
+    let count = 0;
+
+    function traverse(node) {
+        if (node.children) {
+            for (const child of node.children) {
+                traverse(child);
+            }
+        } else {
+            count++;
+        }
+    }
+
+    traverse(bookmarks);
+    return count;
+}
+
+// 计算书签哈希值（从popup.js复制）
+function calculateBookmarksHash(bookmarks) {
+    const sanitizedBookmarks = JSON.parse(JSON.stringify(bookmarks, (key, value) => {
+        if (key === 'id' || key === 'dateAdded' || key === 'dateGroupModified') {
+            return undefined;
+        }
+        return value;
+    }));
+
+    const str = JSON.stringify(sanitizedBookmarks);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+    }
+    return Math.abs(hash).toString();
+}

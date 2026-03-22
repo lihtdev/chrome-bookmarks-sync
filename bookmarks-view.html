@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>云端书签 - 书签同步助手</title>
+    <link rel="stylesheet" href="css/bookmarks-view.css">
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-left">
+                <img src="images/bookmark.svg" alt="图标" class="app-icon">
+                <h1>云端书签列表</h1>
+            </div>
+            <div class="header-right">
+                <span id="total-count" class="total-count">0 个书签</span>
+            </div>
+        </header>
+
+        <div class="search-bar">
+            <input type="text" id="search-input" placeholder="搜索书签..." />
+        </div>
+
+        <div id="loading" class="loading">正在加载云端书签...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="bookmarks-tree" class="bookmarks-tree"></div>
+    </div>
+
+    <script src="js/gitee.js"></script>
+    <script src="js/bookmarks-view.js"></script>
+</body>
+
+</html>

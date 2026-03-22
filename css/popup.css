@@ -329,16 +329,16 @@ form {
         width: 320px;
         padding: 12px;
     }
-    
+
     .row {
         gap: 6px;
     }
-    
+
     .row label {
         --label-width: 90px;
         font-size: 12px;
     }
-    
+
     .btn-row {
         gap: 6px;
     }
