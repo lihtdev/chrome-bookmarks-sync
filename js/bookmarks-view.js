@@ -207,6 +207,12 @@ function renderTreeNode(node, highlightKeyword = '') {
         nameSpan.appendChild(link);
     }
 
+    // 日期显示
+    const date = getNodeDate(node);
+    const dateSpan = document.createElement('span');
+    dateSpan.className = isFolder ? 'folder-date' : 'bookmark-date';
+    dateSpan.textContent = date;
+
     // URL显示
     if (!isFolder && node.url) {
         const urlSpan = document.createElement('span');
@@ -222,9 +228,11 @@ function renderTreeNode(node, highlightKeyword = '') {
         }
         nodeContent.appendChild(nameSpan);
         nodeContent.appendChild(urlSpan);
+        nodeContent.appendChild(dateSpan);
     } else {
         nodeContent.appendChild(icon);
         nodeContent.appendChild(nameSpan);
+        nodeContent.appendChild(dateSpan);
     }
 
     treeNode.appendChild(nodeContent);
@@ -304,4 +312,31 @@ function collapseAll() {
 
     allIcons.forEach(icon => icon.classList.add('collapsed'));
     allChildren.forEach(children => children.classList.add('collapsed'));
+}
+
+// 获取节点日期并格式化
+function getNodeDate(node) {
+    let timestamp = null;
+    // 优先使用修改时间，如果没有则使用创建时间
+    if (node.dateGroupModified) {
+        timestamp = Number(node.dateGroupModified);
+    } else if (node.dateAdded) {
+        timestamp = Number(node.dateAdded);
+    }
+    // Chrome书签时间戳是微秒（16位数字），需要转换为毫秒（13位）
+    // 如果数字位数大于13，说明是微秒，需要除以1000
+    if (timestamp && timestamp.toString().length > 13) {
+        timestamp = Math.floor(timestamp / 1000);
+    }
+    if (!timestamp || timestamp <= 0) {
+        return '';
+    }
+    const date = new Date(timestamp);
+    // 格式化为 年-月-日 时:分
+    return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())} ${padZero(date.getHours())}:${padZero(date.getMinutes())}`;
+}
+
+// 补零
+function padZero(num) {
+    return num < 10 ? '0' + num : num;
 }
