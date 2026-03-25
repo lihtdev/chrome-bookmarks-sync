@@ -179,77 +179,217 @@ async function logout() {
     }
 }
 
-// 同步书签到云端
+// 将云端书签合并到本地
+async function mergeCloudBookmarksToLocal(cloudBookmarks) {
+    // 获取本地书签栏
+    const bookmarks = await chrome.bookmarks.getTree();
+    const localBookmarksBar = retrieveBookmarksBar(bookmarks);
+
+    // 递归删除书签栏下所有现有书签（清空后再创建）
+    if (localBookmarksBar && localBookmarksBar.children) {
+        for (const child of localBookmarksBar.children) {
+            await chrome.bookmarks.removeTree(child.id);
+        }
+    }
+
+    // 递归创建云端书签
+    async function createBookmarkNode(parentId, node) {
+        if (node.children) {
+            // 文件夹
+            const createdFolder = await chrome.bookmarks.create({
+                parentId: parentId,
+                title: node.title
+            });
+            // 递归创建子节点
+            if (node.children) {
+                for (const child of node.children) {
+                    await createBookmarkNode(createdFolder.id, child);
+                }
+            }
+            return createdFolder;
+        } else {
+            // 书签
+            return await chrome.bookmarks.create({
+                parentId: parentId,
+                title: node.title,
+                url: node.url
+            });
+        }
+    }
+
+    // 从书签栏开始创建
+    if (cloudBookmarks.children) {
+        for (const child of cloudBookmarks.children) {
+            await createBookmarkNode('1', child);
+        }
+    }
+}
+
+// 智能双向同步
 async function syncBookmarks() {
-    showStatus('sync', '正在同步书签...', 'info');
-    
+    showStatus('sync', '正在智能同步书签...', 'info');
+
     try {
-        // 获取登录信息
-        const storageData = await chrome.storage.local.get(['giteeAuth']);
+        // 获取登录信息和存储数据
+        const storageData = await chrome.storage.local.get([
+            'giteeAuth',
+            'localBookmarksUpdatedTime',
+            'cloudBookmarksUpdatedTime'
+        ]);
         if (!storageData.giteeAuth) {
             throw new Error('未登录，请先登录');
         }
-        
-        const giteeAuth = storageData.giteeAuth;
-        
+
+        let giteeAuth = storageData.giteeAuth;
+
         // 创建 GiteeAPI 实例
         const giteeApi = new GiteeAPI(giteeAuth.clientId, giteeAuth.clientSecret, giteeAuth.repo);
         giteeApi.setToken(giteeAuth.token);
-        
-        // 获取所有书签
+
+        // 获取当前本地书签
         const bookmarks = await chrome.bookmarks.getTree();
-        
-        // 获取书签栏数据（只同步书签栏，不同步其他书签）
-        const bookmarksBar = retrieveBookmarksBar(bookmarks);
-        
-        // 计算书签哈希值
-        const localBookmarksHash = calculateBookmarksHash(bookmarksBar);
-        
-        // 保存到本地存储
-        await chrome.storage.local.set({
-            'localBookmarks': bookmarksBar,
-            'localBookmarksHash': localBookmarksHash,
-            'localBookmarksUpdatedTime': new Date().toISOString()
-        });
-        
-        // 同步到 Gitee，如果 token 过期则重新认证
+        let localBookmarksBar = retrieveBookmarksBar(bookmarks);
+        const localIsEmpty = !localBookmarksBar || !localBookmarksBar.children || localBookmarksBar.children.length === 0;
+
+        // 获取云端最新书签（带 token 过期处理）
+        let cloudBookmarks;
         try {
-            await giteeApi.syncBookmarks(giteeAuth.userName, giteeAuth.repo, bookmarksBar);
+            try {
+                cloudBookmarks = await giteeApi.getBookmarks(giteeAuth.userName, giteeAuth.repo);
+            } catch (error) {
+                if (error.message === 'token_expired') {
+                    // Token 过期，使用已缓存的配置重新获取新 token
+                    showStatus('sync', 'Token 已过期，正在重新授权...', 'info');
+                    const newToken = await giteeApi.refreshAccessToken();
+                    giteeAuth.token = newToken;
+                    await chrome.storage.local.set({ giteeAuth: giteeAuth });
+                    cloudBookmarks = await giteeApi.getBookmarks(giteeAuth.userName, giteeAuth.repo);
+                } else {
+                    throw error;
+                }
+            }
         } catch (error) {
             if (error.message === 'token_expired') {
-                // Token 过期，使用已缓存的配置重新获取新 token
-                showStatus('sync', 'Token 已过期，正在重新授权...', 'info');
-                const newToken = await giteeApi.refreshAccessToken();
-
-                // 更新存储中的 token
-                giteeAuth.token = newToken;
-                await chrome.storage.local.set({ giteeAuth: giteeAuth });
-
-                // 使用新 token 重试
-                await giteeApi.syncBookmarks(giteeAuth.userName, giteeAuth.repo, bookmarksBar);
-            } else {
                 throw error;
             }
+            throw error;
         }
-        
-        // 更新最后同步时间和云端书签哈希值
+
+        const cloudIsEmpty = !cloudBookmarks || !cloudBookmarks.children || cloudBookmarks.children.length === 0;
+
+        // ========== 智能同步决策 ==========
+        let syncResultMessage = '';
+
+        // 情况 1：本地为空，云端有内容 → 从云端拉取到本地
+        if (localIsEmpty && !cloudIsEmpty) {
+            showStatus('sync', '本地为空，正在从云端拉取...', 'info');
+            await mergeCloudBookmarksToLocal(cloudBookmarks);
+
+            // 更新本地存储
+            const newLocalBookmarks = await chrome.bookmarks.getTree();
+            localBookmarksBar = retrieveBookmarksBar(newLocalBookmarks);
+            const localBookmarksHash = calculateBookmarksHash(localBookmarksBar);
+            await chrome.storage.local.set({
+                'localBookmarks': localBookmarksBar,
+                'localBookmarksHash': localBookmarksHash,
+                'localBookmarksUpdatedTime': new Date().toISOString()
+            });
+
+            // 更新云端存储
+            const cloudBookmarksHash = calculateBookmarksHash(cloudBookmarks);
+            await chrome.storage.local.set({
+                'cloudBookmarks': cloudBookmarks,
+                'cloudBookmarksHash': cloudBookmarksHash,
+                'cloudBookmarksUpdatedTime': new Date().toISOString(),
+                'lastSyncTime': new Date().toISOString()
+            });
+
+            syncResultMessage = '已从云端拉取书签到本地，同步完成！';
+        }
+        // 情况 2：云端为空，本地有内容 → 推送本地到云端
+        else if (cloudIsEmpty && !localIsEmpty) {
+            showStatus('sync', '云端为空，正在推送本地到云端...', 'info');
+
+            // 推送到云端
+            await giteeApi.syncBookmarks(giteeAuth.userName, giteeAuth.repo, localBookmarksBar);
+
+            // 更新存储
+            const localBookmarksHash = calculateBookmarksHash(localBookmarksBar);
+            const now = new Date().toISOString();
+            await chrome.storage.local.set({
+                'localBookmarks': localBookmarksBar,
+                'localBookmarksHash': localBookmarksHash,
+                'localBookmarksUpdatedTime': now,
+                'cloudBookmarks': localBookmarksBar,
+                'cloudBookmarksHash': localBookmarksHash,
+                'cloudBookmarksUpdatedTime': now,
+                'lastSyncTime': now
+            });
+
+            syncResultMessage = '已推送本地书签到云端，同步完成！';
+        }
+        // 情况 3：两边都有内容 → 比较更新时间，新的覆盖旧的
+        else if (!localIsEmpty && !cloudIsEmpty) {
+            const localBookmarksHash = calculateBookmarksHash(localBookmarksBar);
+            const cloudBookmarksHash = calculateBookmarksHash(cloudBookmarks);
+
+            // 内容已经相同，无需同步
+            if (localBookmarksHash === cloudBookmarksHash) {
+                await chrome.storage.local.set({
+                    'lastSyncTime': new Date().toISOString()
+                });
+                syncResultMessage = '本地和云端已经一致，无需同步！';
+            } else {
+                // 比较更新时间
+                const localUpdatedTime = new Date(storageData.localBookmarksUpdatedTime || 0);
+                const cloudUpdatedTime = new Date(storageData.cloudBookmarksUpdatedTime || 0);
+
+                // 云端比本地新 → 拉取云端到本地
+                if (cloudUpdatedTime > localUpdatedTime) {
+                    showStatus('sync', '云端更新，正在拉取到本地...', 'info');
+                    await mergeCloudBookmarksToLocal(cloudBookmarks);
+
+                    // 更新本地存储
+                    const newLocalBookmarks = await chrome.bookmarks.getTree();
+                    const updatedLocalBar = retrieveBookmarksBar(newLocalBookmarks);
+                    const updatedLocalHash = calculateBookmarksHash(updatedLocalBar);
+                    await chrome.storage.local.set({
+                        'localBookmarks': updatedLocalBar,
+                        'localBookmarksHash': updatedLocalHash,
+                        'localBookmarksUpdatedTime': new Date().toISOString(),
+                        'lastSyncTime': new Date().toISOString()
+                    });
+
+                    syncResultMessage = '已从云端拉取更新到本地，同步完成！';
+                }
+                // 本地比云端新 → 推送本地到云端
+                else {
+                    showStatus('sync', '本地更新，正在推送到云端...', 'info');
+                    await giteeApi.syncBookmarks(giteeAuth.userName, giteeAuth.repo, localBookmarksBar);
+
+                    const now = new Date().toISOString();
+                    await chrome.storage.local.set({
+                        'cloudBookmarksHash': localBookmarksHash,
+                        'cloudBookmarksUpdatedTime': now,
+                        'lastSyncTime': now
+                    });
+
+                    syncResultMessage = '已推送本地更新到云端，同步完成！';
+                }
+            }
+        }
+
+        // 更新最后同步时间
         const now = new Date().toISOString();
-        await chrome.storage.local.set({
-            'lastSyncTime': now,
-            'cloudBookmarksHash': localBookmarksHash,
-            'cloudBookmarksUpdatedTime': now
-        });
-        
-        // 更新页面显示
         document.getElementById('last-sync-time-span').textContent = formatDate(now);
-        
+
         // 更新徽章
         chrome.runtime.sendMessage({ action: 'updateBadge' });
-        
-        // 更新书签数量显示
+
+        // 更新书签数量
         await updateBookmarkCounts();
-        
-        showStatus('sync', '同步成功！', 'success');
+
+        showStatus('sync', syncResultMessage, 'success');
     } catch (error) {
         if (error.message === 'token_expired') {
             showStatus('sync', 'Token 已过期，重新授权失败，请重试', 'error');
