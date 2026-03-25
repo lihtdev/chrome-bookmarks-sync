@@ -408,16 +408,39 @@ async function syncBookmarks() {
             const localBookmarksHash = calculateBookmarksHash(localBookmarksBar);
             const cloudBookmarksHash = calculateBookmarksHash(cloudBookmarks);
 
+            // 获取存储中的原始哈希，判断本地是否已经修改
+            const originalStorage = await chrome.storage.local.get([
+                'localBookmarksHash',
+                'localBookmarksUpdatedTime',
+                'cloudBookmarksUpdatedTime'
+            ]);
+
             // 内容已经相同，无需同步
             if (localBookmarksHash === cloudBookmarksHash) {
                 await chrome.storage.local.set({
+                    'localBookmarks': localBookmarksBar,
+                    'localBookmarksHash': localBookmarksHash,
+                    'localBookmarksUpdatedTime': new Date().toISOString(),
+                    'cloudBookmarksHash': localBookmarksHash,
+                    'cloudBookmarksUpdatedTime': new Date().toISOString(),
                     'lastSyncTime': new Date().toISOString()
                 });
                 syncResultMessage = '本地和云端已经一致，无需同步！';
             } else {
-                // 比较更新时间
-                const localUpdatedTime = new Date(storageData.localBookmarksUpdatedTime || 0);
-                const cloudUpdatedTime = new Date(storageData.cloudBookmarksUpdatedTime || 0);
+                // 获取最新的时间戳（必须重新读取存储，不能用函数开头读取的旧数据）
+                const latestStorage = await chrome.storage.local.get([
+                    'localBookmarksHash',
+                    'localBookmarksUpdatedTime',
+                    'cloudBookmarksUpdatedTime'
+                ]);
+
+                // 当前本地书签已经是最新修改后的状态
+                // 如果本地哈希 != 存储中的原始本地哈希，说明本地已经修改
+                // 将当前本地更新时间视为现在，因为用户刚刚修改
+                const localUpdatedTime = (originalStorage.localBookmarksHash !== localBookmarksHash)
+                    ? new Date()  // 本地已经改变，使用当前时间
+                    : new Date(latestStorage.localBookmarksUpdatedTime || 0);
+                const cloudUpdatedTime = new Date(latestStorage.cloudBookmarksUpdatedTime || 0);
 
                 // 云端比本地新 → 拉取云端到本地
                 if (cloudUpdatedTime > localUpdatedTime) {
@@ -432,6 +455,9 @@ async function syncBookmarks() {
                         'localBookmarks': updatedLocalBar,
                         'localBookmarksHash': updatedLocalHash,
                         'localBookmarksUpdatedTime': new Date().toISOString(),
+                        'cloudBookmarks': cloudBookmarks,
+                        'cloudBookmarksHash': cloudBookmarksHash,
+                        'cloudBookmarksUpdatedTime': new Date().toISOString(),
                         'lastSyncTime': new Date().toISOString()
                     });
 
@@ -444,6 +470,9 @@ async function syncBookmarks() {
 
                     const now = new Date().toISOString();
                     await chrome.storage.local.set({
+                        'localBookmarks': localBookmarksBar,
+                        'localBookmarksHash': localBookmarksHash,
+                        'localBookmarksUpdatedTime': now,
                         'cloudBookmarksHash': localBookmarksHash,
                         'cloudBookmarksUpdatedTime': now,
                         'lastSyncTime': now
