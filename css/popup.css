@@ -235,7 +235,12 @@ body {
 }
 
 .text-span.blue {
-    color: var(--primary-color);
+    color: #2196F3;
+    font-weight: 500;
+}
+
+.text-span.orange {
+    color: #FF9800;
     font-weight: 500;
 }
 

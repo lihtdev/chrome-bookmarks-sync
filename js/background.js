@@ -226,22 +226,26 @@ async function updateBadge() {
         // 比较本地和云端书签状态
         const hasLocalChanges = currentLocalHash !== storageData.cloudBookmarksHash;
         const hasCloudChanges = cloudBookmarksHash && cloudBookmarksHash !== currentLocalHash;
-        
+
         if (hasCloudChanges) {
-            // 云端有未同步到本地的书签，显示红色向下箭头
+            // 云端有未同步到本地的书签，显示蓝色向下箭头
             await chrome.action.setBadgeText({ text: '↓' });
-            await chrome.action.setBadgeBackgroundColor({ color: '#ff0000' });
+            await chrome.action.setBadgeBackgroundColor({ color: '#2196F3' });
         } else if (hasLocalChanges) {
-            // 本地有未同步到云端的书签，显示绿色向上箭头
+            // 本地有未同步到云端的书签，显示橙色向上箭头
             await chrome.action.setBadgeText({ text: '↑' });
-            await chrome.action.setBadgeBackgroundColor({ color: '#00ff00' });
+            await chrome.action.setBadgeBackgroundColor({ color: '#FF9800' });
         } else {
-            // 本地和云端书签一致，清除徽章
-            await chrome.action.setBadgeText({ text: '' });
+            // 本地和云端书签一致，显示绿色对勾
+            await chrome.action.setBadgeText({ text: '✓' });
+            await chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
         }
-        
+
     } catch (error) {
         console.error('更新徽章失败：', error);
+        // 同步失败，显示红色叉号
+        await chrome.action.setBadgeText({ text: '×' });
+        await chrome.action.setBadgeBackgroundColor({ color: '#F44333' });
     }
 }
 
