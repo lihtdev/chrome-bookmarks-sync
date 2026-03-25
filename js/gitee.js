@@ -18,6 +18,11 @@ class GiteeAPI {
         this.token = token;
     }
 
+    // 获取当前访问令牌
+    getToken() {
+        return this.token;
+    }
+
     // 获取授权 URL
     getAuthUrl() {
         const redirectUri = chrome.identity.getRedirectURL();
@@ -43,6 +48,32 @@ class GiteeAPI {
         return await response.json();
     }
 
+    // 刷新访问令牌（重新走授权流程）
+    async refreshAccessToken() {
+        const authUrl = this.getAuthUrl();
+        const redirectUrl = await chrome.identity.launchWebAuthFlow({
+            url: authUrl,
+            interactive: true
+        });
+
+        // 解析授权码
+        const urlParams = new URLSearchParams(new URL(redirectUrl).search);
+        const code = urlParams.get('code');
+
+        if (!code) {
+            throw new Error('未获取到授权码');
+        }
+
+        // 获取新的访问令牌
+        const tokenResponse = await this.getAccessToken(code);
+        if (!tokenResponse.access_token) {
+            throw new Error('获取访问令牌失败');
+        }
+
+        this.setToken(tokenResponse.access_token);
+        return tokenResponse.access_token;
+    }
+
     // 获取授权用户的资料
     async getUserInfo() {
         const response = await fetch(`${this.apiBaseUrl}/user`, {
@@ -50,6 +81,11 @@ class GiteeAPI {
                 'Authorization': `token ${this.token}`
             }
         });
+
+        if (response.status === 401) {
+            throw new Error('token_expired');
+        }
+
         return await response.json();
     }
 
@@ -60,6 +96,11 @@ class GiteeAPI {
                 'Authorization': `token ${this.token}`
             }
         });
+
+        if (response.status === 401) {
+            throw new Error('token_expired');
+        }
+
         return await response.json();
     }
 

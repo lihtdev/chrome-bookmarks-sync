@@ -23,14 +23,32 @@ async function loadAndRenderBookmarks() {
             return;
         }
 
-        const giteeAuth = storageData.giteeAuth;
+        let giteeAuth = storageData.giteeAuth;
 
         // 创建 GiteeAPI 实例
         const giteeApi = new GiteeAPI(giteeAuth.clientId, giteeAuth.clientSecret, giteeAuth.repo);
         giteeApi.setToken(giteeAuth.token);
 
         // 从 Gitee 获取书签
-        const cloudBookmarks = await giteeApi.getBookmarks(giteeAuth.userName, giteeAuth.repo);
+        let cloudBookmarks;
+        try {
+            cloudBookmarks = await giteeApi.getBookmarks(giteeAuth.userName, giteeAuth.repo);
+        } catch (error) {
+            if (error.message === 'token_expired') {
+                // Token 过期，使用已缓存的配置重新获取新 token
+                document.getElementById('loading-text').textContent = 'Token 已过期，正在重新授权...';
+                const newToken = await giteeApi.refreshAccessToken();
+
+                // 更新存储中的 token
+                giteeAuth.token = newToken;
+                await chrome.storage.local.set({ giteeAuth: giteeAuth });
+
+                // 使用新 token 重试
+                cloudBookmarks = await giteeApi.getBookmarks(giteeAuth.userName, giteeAuth.repo);
+            } else {
+                throw error;
+            }
+        }
 
         if (!cloudBookmarks) {
             document.getElementById('loading').style.display = 'none';
@@ -54,7 +72,11 @@ async function loadAndRenderBookmarks() {
         treeContainer.appendChild(treeRoot);
     } catch (error) {
         console.error('加载书签失败:', error);
-        showError('加载失败: ' + error.message);
+        if (error.message === 'token_expired') {
+            showError('Token 已过期，重新授权失败，请关闭页面重试');
+        } else {
+            showError('加载失败: ' + error.message);
+        }
     }
 }
 

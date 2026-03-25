@@ -52,32 +52,50 @@ async function syncBookmarksIfLoggedIn() {
             console.log('未登录，跳过同步');
             return;
         }
-        
-        const giteeAuth = storageData.giteeAuth;
-        
+
+        let giteeAuth = storageData.giteeAuth;
+
         // 创建 GiteeAPI 实例
         const giteeApi = new GiteeAPI(giteeAuth.clientId, giteeAuth.clientSecret, giteeAuth.repo);
         giteeApi.setToken(giteeAuth.token);
-        
+
         // 获取所有书签
         const bookmarks = await chrome.bookmarks.getTree();
-        
+
         // 获取书签栏数据
         const bookmarksBar = retrieveBookmarksBar(bookmarks);
-        
+
         // 计算并保存本地书签哈希值
         const localBookmarksHash = calculateBookmarksHash(bookmarksBar);
-        
+
         // 保存到本地存储
         await chrome.storage.local.set({
             'localBookmarks': bookmarksBar,
             'localBookmarksHash': localBookmarksHash,
             'localBookmarksUpdatedTime': new Date().toISOString()
         });
-        
-        // 同步到 Gitee
-        await giteeApi.syncBookmarks(giteeAuth.userName, giteeAuth.repo, bookmarksBar);
-        
+
+        // 同步到 Gitee，如果 token 过期则重新认证
+        try {
+            await giteeApi.syncBookmarks(giteeAuth.userName, giteeAuth.repo, bookmarksBar);
+        } catch (error) {
+            if (error.message === 'token_expired') {
+                // Token 过期，使用已缓存的配置重新获取新 token
+                console.log('Token 已过期，正在重新授权...');
+                const newToken = await giteeApi.refreshAccessToken();
+
+                // 更新存储中的 token
+                giteeAuth.token = newToken;
+                await chrome.storage.local.set({ giteeAuth: giteeAuth });
+
+                // 使用新 token 重试
+                await giteeApi.syncBookmarks(giteeAuth.userName, giteeAuth.repo, bookmarksBar);
+                console.log('重新授权成功');
+            } else {
+                throw error;
+            }
+        }
+
         // 更新最后同步时间和云端书签哈希值
         const now = new Date().toISOString();
         await chrome.storage.local.set({
@@ -85,13 +103,17 @@ async function syncBookmarksIfLoggedIn() {
             'cloudBookmarksHash': localBookmarksHash,
             'cloudBookmarksUpdatedTime': now
         });
-        
+
         console.log('同步成功，最后同步时间：', now);
-        
+
         // 更新徽章
         updateBadge();
     } catch (error) {
-        console.error('自动同步失败：', error);
+        if (error.message === 'token_expired') {
+            console.error('自动同步失败：Token 已过期，重新授权失败');
+        } else {
+            console.error('自动同步失败：', error);
+        }
     }
 }
 
@@ -133,18 +155,18 @@ async function updateBadge() {
     try {
         // 获取登录信息
         const storageData = await chrome.storage.local.get(['giteeAuth', 'localBookmarks', 'localBookmarksHash', 'cloudBookmarksHash', 'localBookmarksUpdatedTime', 'cloudBookmarksUpdatedTime']);
-        
+
         if (!storageData.giteeAuth) {
             // 未登录，清除徽章
             await chrome.action.setBadgeText({ text: '' });
             return;
         }
-        
+
         // 获取当前本地书签
         const bookmarks = await chrome.bookmarks.getTree();
         const bookmarksBar = retrieveBookmarksBar(bookmarks);
         const currentLocalHash = calculateBookmarksHash(bookmarksBar);
-        
+
         // 更新本地书签哈希值
         if (currentLocalHash !== storageData.localBookmarksHash) {
             await chrome.storage.local.set({
@@ -152,20 +174,39 @@ async function updateBadge() {
                 'localBookmarksUpdatedTime': new Date().toISOString()
             });
         }
-        
+
         // 获取云端书签信息
-        const giteeAuth = storageData.giteeAuth;
+        let giteeAuth = storageData.giteeAuth;
         const giteeApi = new GiteeAPI(giteeAuth.clientId, giteeAuth.clientSecret, giteeAuth.repo);
         giteeApi.setToken(giteeAuth.token);
-        
+
         let cloudBookmarks = null;
         let cloudBookmarksHash = null;
-        
+
         try {
-            cloudBookmarks = await giteeApi.getBookmarks(giteeAuth.userName, giteeAuth.repo);
+            try {
+                cloudBookmarks = await giteeApi.getBookmarks(giteeAuth.userName, giteeAuth.repo);
+            } catch (error) {
+                if (error.message === 'token_expired') {
+                    // Token 过期，使用已缓存的配置重新获取新 token
+                    console.log('Token 已过期，正在重新授权...');
+                    const newToken = await giteeApi.refreshAccessToken();
+
+                    // 更新存储中的 token
+                    giteeAuth.token = newToken;
+                    await chrome.storage.local.set({ giteeAuth: giteeAuth });
+
+                    // 使用新 token 重试
+                    cloudBookmarks = await giteeApi.getBookmarks(giteeAuth.userName, giteeAuth.repo);
+                    console.log('重新授权成功');
+                } else {
+                    throw error;
+                }
+            }
+
             if (cloudBookmarks) {
                 cloudBookmarksHash = calculateBookmarksHash(cloudBookmarks);
-                
+
                 // 更新云端书签哈希值
                 if (cloudBookmarksHash !== storageData.cloudBookmarksHash) {
                     await chrome.storage.local.set({
@@ -175,7 +216,11 @@ async function updateBadge() {
                 }
             }
         } catch (error) {
-            console.error('获取云端书签失败：', error);
+            if (error.message === 'token_expired') {
+                console.error('获取云端书签失败：Token 已过期，重新授权失败');
+            } else {
+                console.error('获取云端书签失败：', error);
+            }
         }
         
         // 比较本地和云端书签状态
@@ -215,6 +260,62 @@ class GiteeAPI {
         this.token = token;
     }
 
+    // 获取当前访问令牌
+    getToken() {
+        return this.token;
+    }
+
+    // 获取授权 URL
+    getAuthUrl() {
+        const redirectUri = chrome.identity.getRedirectURL();
+        return `https://gitee.com/oauth/authorize?client_id=${this.clientId}&redirect_uri=${redirectUri}&response_type=code&scope=user_info%20projects`;
+    }
+
+    // 通过授权码获取访问令牌
+    async getAccessToken(code) {
+        const redirectUri = chrome.identity.getRedirectURL();
+        const response = await fetch('https://gitee.com/oauth/token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                client_id: this.clientId,
+                client_secret: this.clientSecret,
+                code: code,
+                grant_type: 'authorization_code',
+                redirect_uri: redirectUri
+            })
+        });
+        return await response.json();
+    }
+
+    // 刷新访问令牌（重新走授权流程）
+    async refreshAccessToken() {
+        const authUrl = this.getAuthUrl();
+        const redirectUrl = await chrome.identity.launchWebAuthFlow({
+            url: authUrl,
+            interactive: true
+        });
+
+        // 解析授权码
+        const urlParams = new URLSearchParams(new URL(redirectUrl).search);
+        const code = urlParams.get('code');
+
+        if (!code) {
+            throw new Error('未获取到授权码');
+        }
+
+        // 获取新的访问令牌
+        const tokenResponse = await this.getAccessToken(code);
+        if (!tokenResponse.access_token) {
+            throw new Error('获取访问令牌失败');
+        }
+
+        this.setToken(tokenResponse.access_token);
+        return tokenResponse.access_token;
+    }
+
     // 获取文件的 SHA 值（用于更新文件）
     async getFileSha(owner, repo, path) {
         try {
@@ -223,9 +324,17 @@ class GiteeAPI {
                     'Authorization': `token ${this.token}`
                 }
             });
+
+            if (response.status === 401) {
+                throw new Error('token_expired');
+            }
+
             const fileInfo = await response.json();
             return fileInfo.sha;
         } catch (error) {
+            if (error.message === 'token_expired') {
+                throw error;
+            }
             return null;
         }
     }
@@ -250,6 +359,11 @@ class GiteeAPI {
             },
             body: JSON.stringify(body)
         });
+
+        if (response.status === 401) {
+            throw new Error('token_expired');
+        }
+
         return await response.json();
     }
 
@@ -275,10 +389,21 @@ class GiteeAPI {
                     'Authorization': `token ${this.token}`
                 }
             });
+
+            if (response.status === 401) {
+                throw new Error('token_expired');
+            }
+
             const fileInfo = await response.json();
+            if (!fileInfo.content) {
+                return null;
+            }
             const content = decodeURIComponent(escape(atob(fileInfo.content)));
             return JSON.parse(content);
         } catch (error) {
+            if (error.message === 'token_expired') {
+                throw error;
+            }
             return null;
         }
     }
