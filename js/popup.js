@@ -179,49 +179,124 @@ async function logout() {
     }
 }
 
-// 将云端书签合并到本地
+// 将云端书签增量合并到本地（只修改变化的节点，不碰未变化的）
 async function mergeCloudBookmarksToLocal(cloudBookmarks) {
     // 获取本地书签栏
     const bookmarks = await chrome.bookmarks.getTree();
     const localBookmarksBar = retrieveBookmarksBar(bookmarks);
 
-    // 递归删除书签栏下所有现有书签（清空后再创建）
-    if (localBookmarksBar && localBookmarksBar.children) {
-        for (const child of localBookmarksBar.children) {
-            await chrome.bookmarks.removeTree(child.id);
-        }
-    }
-
-    // 递归创建云端书签
-    async function createBookmarkNode(parentId, node) {
-        if (node.children) {
-            // 文件夹
-            const createdFolder = await chrome.bookmarks.create({
-                parentId: parentId,
-                title: node.title
-            });
-            // 递归创建子节点
-            if (node.children) {
-                for (const child of node.children) {
-                    await createBookmarkNode(createdFolder.id, child);
-                }
-            }
-            return createdFolder;
-        } else {
-            // 书签
-            return await chrome.bookmarks.create({
-                parentId: parentId,
-                title: node.title,
-                url: node.url
-            });
-        }
-    }
-
-    // 从书签栏开始创建
-    if (cloudBookmarks.children) {
+    // 增量合并根节点（书签栏的直接子节点）
+    if (cloudBookmarks.children && localBookmarksBar && localBookmarksBar.children) {
+        await mergeNodeChildren('1', cloudBookmarks.children, localBookmarksBar.children);
+    } else if (cloudBookmarks.children && (!localBookmarksBar || !localBookmarksBar.children)) {
+        // 本地书签栏为空，直接创建所有
         for (const child of cloudBookmarks.children) {
             await createBookmarkNode('1', child);
         }
+    }
+
+    console.log('云端书签增量合并到本地完成');
+}
+
+// 增量合并一组子节点
+async function mergeNodeChildren(parentId, cloudChildren, localChildren) {
+    // 创建本地节点标题 → 节点列表 的映射（同一父节点下可能有同名节点，所以用数组）
+    const localMap = new Map();
+    for (const localNode of localChildren) {
+        const key = normalizeKey(localNode.title);
+        if (!localMap.has(key)) {
+            localMap.set(key, []);
+        }
+        localMap.get(key).push(localNode);
+    }
+
+    // 处理云端每个节点
+    for (const cloudNode of cloudChildren) {
+        const key = normalizeKey(cloudNode.title);
+        const matchingLocalNodes = localMap.get(key) || [];
+
+        if (matchingLocalNodes.length > 0) {
+            // 找到匹配节点，取第一个匹配
+            const localNode = matchingLocalNodes[0];
+            // 从映射中移除（剩下的就是需要删除的）
+            matchingLocalNodes.shift();
+            if (matchingLocalNodes.length === 0) {
+                localMap.delete(key);
+            }
+
+            // 比较内容，如果有变化则更新，递归合并子节点
+            const needsUpdate = nodeNeedsUpdate(localNode, cloudNode);
+            if (needsUpdate) {
+                await chrome.bookmarks.update(localNode.id, {
+                    title: cloudNode.title,
+                    url: cloudNode.url
+                });
+            }
+
+            // 递归合并子节点
+            if (cloudNode.children && localNode.children) {
+                await mergeNodeChildren(localNode.id, cloudNode.children, localNode.children);
+            } else if (cloudNode.children && (!localNode.children || localNode.children.length === 0)) {
+                // 本地没有子节点，云端有，全部创建
+                for (const child of cloudNode.children) {
+                    await createBookmarkNode(localNode.id, child);
+                }
+            }
+        } else {
+            // 云端有，本地没有 → 创建新节点
+            await createBookmarkNode(parentId, cloudNode);
+        }
+    }
+
+    // 删除本地有但云端没有的节点
+    for (const [key, remainingNodes] of localMap) {
+        for (const remainingNode of remainingNodes) {
+            await chrome.bookmarks.removeTree(remainingNode.id);
+        }
+    }
+}
+
+// 判断节点是否需要更新
+function nodeNeedsUpdate(localNode, cloudNode) {
+    // 标题不同
+    if (localNode.title !== cloudNode.title) {
+        return true;
+    }
+    // URL不同（书签节点）
+    if (cloudNode.url && localNode.url !== cloudNode.url) {
+        return true;
+    }
+    // 文件夹节点，子节点数量不同，需要处理子节点，但不需要更新自身
+    return false;
+}
+
+// 归一化节点名称用于匹配（去除大小写空白差异，增加匹配成功率）
+function normalizeKey(title) {
+    return title.toLowerCase().replace(/\s+/g, '');
+}
+
+// 创建单个书签节点（递归创建子节点）
+async function createBookmarkNode(parentId, node) {
+    if (node.children) {
+        // 文件夹
+        const createdFolder = await chrome.bookmarks.create({
+            parentId: parentId,
+            title: node.title
+        });
+        // 递归创建子节点
+        if (node.children) {
+            for (const child of node.children) {
+                await createBookmarkNode(createdFolder.id, child);
+            }
+        }
+        return createdFolder;
+    } else {
+        // 书签
+        return await chrome.bookmarks.create({
+            parentId: parentId,
+            title: node.title,
+            url: node.url
+        });
     }
 }
 
