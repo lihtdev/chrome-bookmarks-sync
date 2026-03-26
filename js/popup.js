@@ -427,20 +427,36 @@ async function syncBookmarks() {
                 });
                 syncResultMessage = '本地和云端已经一致，无需同步！';
             } else {
-                // 获取最新的时间戳（必须重新读取存储，不能用函数开头读取的旧数据）
+                // 获取最新的存储数据
                 const latestStorage = await chrome.storage.local.get([
                     'localBookmarksHash',
                     'localBookmarksUpdatedTime',
+                    'cloudBookmarksHash',
                     'cloudBookmarksUpdatedTime'
                 ]);
 
-                // 当前本地书签已经是最新修改后的状态
-                // 如果本地哈希 != 存储中的原始本地哈希，说明本地已经修改
-                // 将当前本地更新时间视为现在，因为用户刚刚修改
-                const localUpdatedTime = (originalStorage.localBookmarksHash !== localBookmarksHash)
-                    ? new Date()  // 本地已经改变，使用当前时间
-                    : new Date(latestStorage.localBookmarksUpdatedTime || 0);
-                const cloudUpdatedTime = new Date(latestStorage.cloudBookmarksUpdatedTime || 0);
+                // ========== 正确判断更新时间 ==========
+                // 1. 如果本地当前哈希 != 存储中保存的本地哈希 → 本地已经修改过 → 本地更新时间 = 当前时间
+                // 2. 如果云端当前哈希 != 存储中保存的云端哈希 → 云端已经被他人修改 → 云端更新时间 = 当前时间
+                // 3. 否则 → 使用存储中保存的时间
+                let localUpdatedTime;
+                let cloudUpdatedTime;
+
+                if (latestStorage.localBookmarksHash !== localBookmarksHash) {
+                    // 本地哈希变化，说明本地已修改 → 当前时间
+                    localUpdatedTime = new Date();
+                } else {
+                    // 本地没变化，使用存储中的时间
+                    localUpdatedTime = new Date(latestStorage.localBookmarksUpdatedTime || 0);
+                }
+
+                if (latestStorage.cloudBookmarksHash !== cloudBookmarksHash) {
+                    // 云端哈希变化，说明云端已被其他设备修改 → 当前时间
+                    cloudUpdatedTime = new Date();
+                } else {
+                    // 云端没变化，使用存储中的时间
+                    cloudUpdatedTime = new Date(latestStorage.cloudBookmarksUpdatedTime || 0);
+                }
 
                 // 云端比本地新 → 拉取云端到本地
                 if (cloudUpdatedTime > localUpdatedTime) {
@@ -577,17 +593,11 @@ async function getBookmarksFromCloud() {
 }
 
 // 计算书签哈希值
+// 白名单方式：只保留我们真正关心的字段，排除其他所有字段
+// 这样浏览器新增任何原生字段都不会影响哈希计算
 function calculateBookmarksHash(bookmarks) {
-    // 移除动态生成的id和dateAdded等字段，只比较实际内容
-    const sanitizedBookmarks = JSON.parse(JSON.stringify(bookmarks, (key, value) => {
-        if (key === 'id' || key === 'dateAdded' || key === 'dateGroupModified') {
-            return undefined;
-        }
-        return value;
-    }));
-    
-    // 使用JSON字符串生成哈希值
-    const str = JSON.stringify(sanitizedBookmarks);
+    const sanitized = sanitizeBookmarkNode(bookmarks);
+    const str = JSON.stringify(sanitized);
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
@@ -595,6 +605,28 @@ function calculateBookmarksHash(bookmarks) {
         hash = hash & hash; // Convert to 32bit integer
     }
     return Math.abs(hash).toString();
+}
+
+// 递归清理书签节点，只保留需要的字段
+function sanitizeBookmarkNode(node) {
+    const cleaned = {};
+    // 文件夹和书签都需要 title
+    if (node.title !== undefined) {
+        cleaned.title = node.title;
+    }
+    // index: 排序位置，调换顺序会改变，需要参与计算
+    if (node.index !== undefined) {
+        cleaned.index = node.index;
+    }
+    // 书签有 url
+    if (node.url !== undefined) {
+        cleaned.url = node.url;
+    }
+    // 文件夹有 children，递归清理
+    if (node.children && node.children.length > 0) {
+        cleaned.children = node.children.map(child => sanitizeBookmarkNode(child));
+    }
+    return cleaned;
 }
 
 // 计算书签数量

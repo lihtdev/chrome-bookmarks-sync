@@ -299,16 +299,12 @@ function countBookmarks(bookmarks) {
     return count;
 }
 
-// 计算书签哈希值（从popup.js复制）
+// 计算书签哈希值
+// 白名单方式：只保留我们真正关心的字段，排除其他所有字段
+// 这样浏览器新增任何原生字段都不会影响哈希计算
 function calculateBookmarksHash(bookmarks) {
-    const sanitizedBookmarks = JSON.parse(JSON.stringify(bookmarks, (key, value) => {
-        if (key === 'id' || key === 'dateAdded' || key === 'dateGroupModified') {
-            return undefined;
-        }
-        return value;
-    }));
-
-    const str = JSON.stringify(sanitizedBookmarks);
+    const sanitized = sanitizeBookmarkNode(bookmarks);
+    const str = JSON.stringify(sanitized);
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
@@ -316,6 +312,28 @@ function calculateBookmarksHash(bookmarks) {
         hash = hash & hash;
     }
     return Math.abs(hash).toString();
+}
+
+// 递归清理书签节点，只保留需要的字段
+function sanitizeBookmarkNode(node) {
+    const cleaned = {};
+    // 文件夹和书签都需要 title
+    if (node.title !== undefined) {
+        cleaned.title = node.title;
+    }
+    // index: 排序位置，调换顺序会改变，需要参与计算
+    if (node.index !== undefined) {
+        cleaned.index = node.index;
+    }
+    // 书签有 url
+    if (node.url !== undefined) {
+        cleaned.url = node.url;
+    }
+    // 文件夹有 children，递归清理
+    if (node.children && node.children.length > 0) {
+        cleaned.children = node.children.map(child => sanitizeBookmarkNode(child));
+    }
+    return cleaned;
 }
 
 // 展开全部文件夹
