@@ -491,17 +491,21 @@ async function updateBadge() {
         }
         
         // 比较本地和云端书签状态
-        const hasLocalChanges = currentLocalHash !== storageData.cloudBookmarksHash;
-        const hasCloudChanges = cloudBookmarksHash && cloudBookmarksHash !== currentLocalHash;
+        // 参考同步逻辑：基于存储的时间戳判断谁更新
+        let localUpdatedTime = new Date(storageData.localBookmarksUpdatedTime || 0).getTime();
+        let cloudUpdatedTime = new Date(storageData.cloudBookmarksUpdatedTime || 0).getTime();
 
-        if (hasCloudChanges) {
-            // 云端有未同步到本地的书签，显示蓝色向下箭头
-            await chrome.action.setBadgeText({ text: '↓' });
-            await chrome.action.setBadgeBackgroundColor({ color: '#2196F3' });
-        } else if (hasLocalChanges) {
-            // 本地有未同步到云端的书签，显示橙色向上箭头
-            await chrome.action.setBadgeText({ text: '↑' });
-            await chrome.action.setBadgeBackgroundColor({ color: '#FF9800' });
+        // 如果哈希不同，根据更新时间判断哪边更新
+        if (currentLocalHash !== storageData.cloudBookmarksHash && cloudBookmarksHash) {
+            if (cloudUpdatedTime > localUpdatedTime) {
+                // 云端比本地新，需要拉取到本地
+                await chrome.action.setBadgeText({ text: '↓' });
+                await chrome.action.setBadgeBackgroundColor({ color: '#2196F3' });
+            } else {
+                // 本地比云端新，需要推送到云端
+                await chrome.action.setBadgeText({ text: '↑' });
+                await chrome.action.setBadgeBackgroundColor({ color: '#FF9800' });
+            }
         } else {
             // 本地和云端书签一致，显示绿色对勾
             await chrome.action.setBadgeText({ text: '✓' });
