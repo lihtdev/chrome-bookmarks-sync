@@ -507,9 +507,8 @@ async function updateBadge() {
                 await chrome.action.setBadgeBackgroundColor({ color: '#FF9800' });
             }
         } else {
-            // 本地和云端书签一致，显示绿色对勾
-            await chrome.action.setBadgeText({ text: '✓' });
-            await chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+            // 本地和云端书签一致，清除徽章显示正常图标
+            await chrome.action.setBadgeText({ text: '' });
         }
 
     } catch (error) {
