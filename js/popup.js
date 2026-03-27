@@ -647,21 +647,72 @@ function countBookmarks(bookmarks) {
     return count;
 }
 
-// 比较两个书签树，返回差异数量
+// 比较两个书签树，返回差异信息
 function compareBookmarks(localBookmarks, cloudBookmarks) {
-    // 简单实现：比较书签数量差异
-    // 更复杂的实现可以比较每个书签的具体内容
-    const localCount = countBookmarks(localBookmarks);
-    const cloudCount = countBookmarks(cloudBookmarks);
+    const result = {
+        localOnlyCount: 0,  // 本地有而云端没有（未同步到云端）
+        cloudOnlyCount: 0,  // 云端有而本地没有（未更新到本地）
+        modifiedCount: 0    // 两边都有但内容不同（已修改）
+    };
+
+    if (!localBookmarks || !cloudBookmarks) {
+        if (!localBookmarks && cloudBookmarks) {
+            result.cloudOnlyCount = countBookmarks(cloudBookmarks);
+        } else if (localBookmarks && !cloudBookmarks) {
+            result.localOnlyCount = countBookmarks(localBookmarks);
+        }
+        return result;
+    }
+
+    // 构建本地书签的映射（用于查找）
+    const localMap = new Map();
+    buildBookmarkMap(localBookmarks, '', localMap);
+
+    // 构建云端书签的映射
+    const cloudMap = new Map();
+    buildBookmarkMap(cloudBookmarks, '', cloudMap);
+
+    // 计算本地有而云端没有的
+    for (const [key, localNode] of localMap) {
+        if (!cloudMap.has(key)) {
+            result.localOnlyCount++;
+        } else if (localNode.url && localNode.url !== cloudMap.get(key).url) {
+            result.modifiedCount++;
+        }
+    }
+
+    // 计算云端有而本地没有的
+    for (const [key, cloudNode] of cloudMap) {
+        if (!localMap.has(key)) {
+            result.cloudOnlyCount++;
+        }
+    }
+
+    return result;
+}
+
+// 构建书签映射（路径 + 标题 作为 key）
+function buildBookmarkMap(node, parentPath, map) {
+    const path = parentPath + '/' + node.title;
     
-    return Math.abs(localCount - cloudCount);
+    if (node.url) {
+        // 书签节点
+        map.set(path, node);
+    }
+    
+    // 递归处理子节点
+    if (node.children) {
+        for (const child of node.children) {
+            buildBookmarkMap(child, path, map);
+        }
+    }
 }
 
 // 更新书签数量显示
 async function updateBookmarkCounts() {
     try {
         // 获取登录信息
-        const storageData = await chrome.storage.local.get(['giteeAuth']);
+        const storageData = await chrome.storage.local.get(['giteeAuth', 'localBookmarksHash', 'cloudBookmarksHash', 'localBookmarksUpdatedTime', 'cloudBookmarksUpdatedTime']);
         if (!storageData.giteeAuth) {
             return;
         }
@@ -695,27 +746,49 @@ async function updateBookmarkCounts() {
                 throw error;
             }
         }
-        
+
         // 计算差异数量
         let cloudChangesCount = 0;
         let localChangesCount = 0;
-        
+
         if (cloudBookmarks) {
             // 计算本地和云端的哈希值
             const localHash = calculateBookmarksHash(localBookmarksBar);
             const cloudHash = calculateBookmarksHash(cloudBookmarks);
-            
+
             // 如果哈希值不同，说明有差异
             if (localHash !== cloudHash) {
-                // 计算差异数量
-                const diffCount = compareBookmarks(localBookmarksBar, cloudBookmarks);
-                
-                // 更新显示
-                cloudChangesCount = diffCount;
-                localChangesCount = diffCount;
+                // 获取存储中的哈希和时间戳
+                const storedLocalHash = storageData.localBookmarksHash;
+                const storedCloudHash = storageData.cloudBookmarksHash;
+                const localUpdatedTime = new Date(storageData.localBookmarksUpdatedTime || 0).getTime();
+                const cloudUpdatedTime = new Date(storageData.cloudBookmarksUpdatedTime || 0).getTime();
+
+                // 计算书签差异
+                const diffResult = compareBookmarks(localBookmarksBar, cloudBookmarks);
+
+                // 根据更新方向确定显示
+                if (storedLocalHash && localHash !== storedLocalHash) {
+                    // 本地已修改，本地比云端新
+                    localChangesCount = diffResult.localOnlyCount + diffResult.modifiedCount;
+                    cloudChangesCount = 0;
+                } else if (storedCloudHash && cloudHash !== storedCloudHash) {
+                    // 云端已修改，云端比本地新
+                    cloudChangesCount = diffResult.cloudOnlyCount + diffResult.modifiedCount;
+                    localChangesCount = 0;
+                } else {
+                    // 哈希变化但无法确定方向，使用时间戳判断
+                    if (cloudUpdatedTime > localUpdatedTime) {
+                        cloudChangesCount = diffResult.cloudOnlyCount + diffResult.modifiedCount;
+                        localChangesCount = 0;
+                    } else {
+                        localChangesCount = diffResult.localOnlyCount + diffResult.modifiedCount;
+                        cloudChangesCount = 0;
+                    }
+                }
             }
         }
-        
+
         // 更新页面显示
         document.getElementById('cloud-changes-count').textContent = cloudChangesCount;
         document.getElementById('local-changes-count').textContent = localChangesCount;
