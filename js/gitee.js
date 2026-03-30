@@ -153,13 +153,9 @@ class GiteeAPI {
     // 从 Gitee 获取书签
     async getBookmarks(owner, repo) {
         const path = 'bookmarks.json';
-        try {
-            const fileInfo = await this.getRepoContent(owner, repo, path);
-            const content = decodeURIComponent(escape(atob(fileInfo.content)));
-            return JSON.parse(content);
-        } catch (error) {
-            return null;
-        }
+        const fileInfo = await this.getRepoContent(owner, repo, path);
+        const content = decodeURIComponent(escape(atob(fileInfo.content)));
+        return JSON.parse(content);
     }
 }
 
