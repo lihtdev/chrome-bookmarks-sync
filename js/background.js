@@ -312,6 +312,13 @@ async function mergeNodeChildren(parentId, cloudChildren, localChildren) {
                 });
             }
 
+            // 处理 index（排序位置）变化
+            if (localNode.index !== cloudNode.index) {
+                await chrome.bookmarks.move(localNode.id, {
+                    index: cloudNode.index
+                });
+            }
+
             // 递归合并子节点
             if (cloudNode.children && localNode.children) {
                 await mergeNodeChildren(localNode.id, cloudNode.children, localNode.children);
