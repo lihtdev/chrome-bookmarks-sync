@@ -11,18 +11,14 @@
 
 <body>
     <div class="content">
-        <!-- 顶部用户头像 -->
-        <div class="top-avatar">
-            <img id="user-avatar" class="avatar" src="" alt="用户头像" />
+        <!-- 应用头部 -->
+        <div class="app-header">
+            <img src="images/bookmark.svg" alt="应用图标" class="app-icon" />
+            <h3 class="app-name">书签同步助手</h3>
+            <a href="https://gitee.com" target="_blank" class="gitee-link">Gitee</a>
         </div>
         
         <div class="tab active-tab" id="login-tab">
-            <!-- 应用头部 -->
-            <div class="app-header">
-                <img src="images/bookmark.svg" alt="应用图标" class="app-icon" />
-                <h3 class="app-name">书签同步助手</h3>
-            </div>
-            
             <form>
                 <div class="row">
                     <label for="client-id-input">Client ID</label>
@@ -46,6 +42,10 @@
         <div class="tab" id="sync-tab">
             <!-- 用户信息区域 -->
             <div class="user-info">
+                <!-- 顶部用户头像 -->
+                <div class="top-avatar">
+                    <img id="user-avatar" class="avatar" src="" alt="用户头像" />
+                </div>
                 <div class="user-details">
                     <div class="row">
                         <label>昵称：</label>

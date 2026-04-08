@@ -318,6 +318,23 @@ form {
     vertical-align: middle;
 }
 
+/* Gitee 链接 */
+.gitee-link {
+    font-size: 12px;
+    color: var(--primary-color);
+    text-decoration: none;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border: 1px solid var(--primary-color);
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.gitee-link:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
 /* 卡片效果 */
 .card {
     background: var(--card-bg);
