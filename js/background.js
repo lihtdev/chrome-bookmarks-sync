@@ -1,7 +1,13 @@
 // Chrome书签同步助手 - 后台脚本
 
-// 自动同步间隔（毫秒）
-const AUTO_SYNC_INTERVAL = 60 * 60 * 1000; // 1小时
+// 自动同步间隔（分钟），通过 chrome.alarms 调度
+const AUTO_SYNC_INTERVAL_MINUTES = 60; // 1小时
+
+// 同步并发锁：合并过程中 chrome.bookmarks.create/update/move/removeTree 会触发
+// onCreated/onChanged/onMoved/onRemoved 事件，若不拦截会重入 syncBookmarksIfLoggedIn，
+// 导致重入的 sync 误判方向、把含半成品/重复节点的本地树推到云端。
+let isSyncing = false;
+let pendingSync = false;
 
 // 监听书签变化
 chrome.bookmarks.onCreated.addListener(() => {
@@ -34,17 +40,49 @@ function initAutoSync() {
     // 立即执行一次同步和徽章更新
     syncBookmarksIfLoggedIn();
     updateBadge();
-    
-    // 设置定时同步
-    setInterval(() => {
-        console.log('执行定时同步');
-        syncBookmarksIfLoggedIn();
-        updateBadge();
-    }, AUTO_SYNC_INTERVAL);
+
+    // 使用 chrome.alarms 调度定时同步（MV3 下 service worker 会被休眠，
+    // setInterval 不可靠；chrome.alarms 可在 SW 唤醒时可靠触发）
+    chrome.alarms.create('autoSync', { periodInMinutes: AUTO_SYNC_INTERVAL_MINUTES });
 }
 
-// 如果已登录则同步书签（智能双向同步）
+// 监听定时器触发
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'autoSync') {
+        console.log('执行定时同步（alarm）');
+        syncBookmarksIfLoggedIn();
+    }
+});
+
+// 同步入口（带并发锁）：合并过程中 chrome.bookmarks 写操作会触发书签事件，
+// 事件监听器会再次调用本函数。用 isSyncing 合并重入为一次 trailing 同步，
+// 避免多个 sync 并发操作同一书签树、误判方向、推送半成品到云端。
 async function syncBookmarksIfLoggedIn() {
+    if (isSyncing) {
+        // 已有同步在进行，标记需要在当前同步结束后再跑一次（合并期间累积的事件）
+        pendingSync = true;
+        return { success: true, message: '同步进行中，已排队' };
+    }
+    isSyncing = true;
+    try {
+        const result = await doSyncBookmarks();
+        return result;
+    } finally {
+        isSyncing = false;
+        if (pendingSync) {
+            // 合并期间又有书签变化，异步再跑一次（脱离当前调用栈，避免递归栈累积）
+            pendingSync = false;
+            setTimeout(() => syncBookmarksIfLoggedIn(), 0);
+        } else {
+            // 无 pending 时刷新徽章（此时 isSyncing=false，不会被 updateBadge 守卫跳过）
+            updateBadge();
+        }
+    }
+}
+
+// 如果已登录则同步书签（智能双向同步）—— 实际执行主体，返回 {success, message}
+async function doSyncBookmarks() {
+    let syncResult = { success: true, message: '同步完成' };
     try {
         // 获取登录信息
         const storageData = await chrome.storage.local.get([
@@ -59,7 +97,7 @@ async function syncBookmarksIfLoggedIn() {
 
         if (!storageData.giteeAuth) {
             console.log('未登录，跳过同步');
-            return;
+            return { success: false, message: '未登录，请先登录' };
         }
 
         let giteeAuth = storageData.giteeAuth;
@@ -239,10 +277,11 @@ async function syncBookmarksIfLoggedIn() {
         }
 
         console.log('自动同步完成');
-        // 更新徽章
-        updateBadge();
+        // 徽章由 syncBookmarksIfLoggedIn 的 finally 统一刷新，此处不再调用
+        return syncResult;
     } catch (error) {
         console.error('自动同步失败：', error);
+        return { success: false, message: '同步失败：' + (error && error.message ? error.message : String(error)) };
     }
 }
 
@@ -425,6 +464,13 @@ function sanitizeBookmarkNode(node) {
 
 // 更新徽章
 async function updateBadge() {
+    // 同步进行中跳过：避免在合并中途写 localBookmarksHash/cloudBookmarksHash
+    // 等存储字段，污染 syncBookmarksIfLoggedIn 的时间戳方向判定。
+    // 徽章由 syncBookmarksIfLoggedIn 的 finally 在同步结束后统一刷新。
+    if (isSyncing) {
+        console.log('同步进行中，跳过徽章更新');
+        return;
+    }
     try {
         // 获取登录信息
         const storageData = await chrome.storage.local.get(['giteeAuth', 'localBookmarks', 'localBookmarksHash', 'cloudBookmarksHash', 'localBookmarksUpdatedTime', 'cloudBookmarksUpdatedTime']);
@@ -696,7 +742,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.log('收到更新徽章请求');
         updateBadge();
         sendResponse({ success: true });
+        return false;
     }
+    if (message.action === 'syncNow') {
+        // popup 委托 background 执行同步（popup 不再自己合并，避免跨上下文并发）
+        console.log('收到立即同步请求（来自 popup）');
+        syncBookmarksIfLoggedIn().then((result) => {
+            sendResponse(result || { success: false, message: '同步未执行' });
+        });
+        return true; // 异步 sendResponse，必须返回 true
+    }
+    return false;
 });
 
 // 启动扩展时初始化

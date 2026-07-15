@@ -9,7 +9,8 @@
     "permissions": [
         "storage",
         "bookmarks",
-        "identity"
+        "identity",
+        "alarms"
     ],
     "action": {
         "default_popup": "popup.html",

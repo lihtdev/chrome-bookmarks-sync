@@ -151,11 +151,23 @@ class GiteeAPI {
     }
 
     // 从 Gitee 获取书签
+    // 文件不存在(404)或读取失败时返回 null,与 background 内嵌版语义保持一致,
+    // 避免上层(popup 差异计数 / bookmarks-view 页)因 atob(undefined) 抛 TypeError。
     async getBookmarks(owner, repo) {
         const path = 'bookmarks.json';
-        const fileInfo = await this.getRepoContent(owner, repo, path);
-        const content = decodeURIComponent(escape(atob(fileInfo.content)));
-        return JSON.parse(content);
+        try {
+            const fileInfo = await this.getRepoContent(owner, repo, path);
+            if (!fileInfo || !fileInfo.content) {
+                return null;
+            }
+            const content = decodeURIComponent(escape(atob(fileInfo.content)));
+            return JSON.parse(content);
+        } catch (error) {
+            if (error.message === 'token_expired') {
+                throw error;
+            }
+            return null;
+        }
     }
 }
 
