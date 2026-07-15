@@ -248,84 +248,8 @@ function sanitizeBookmarkNode(node) {
     return cleaned;
 }
 
-// 计算书签数量
-function countBookmarks(bookmarks) {
-    let count = 0;
-    
-    function traverse(node) {
-        if (node.children) {
-            for (const child of node.children) {
-                traverse(child);
-            }
-        } else {
-            count++;
-        }
-    }
-    
-    traverse(bookmarks);
-    return count;
-}
-
-// 比较两个书签树，返回差异信息
-function compareBookmarks(localBookmarks, cloudBookmarks) {
-    const result = {
-        localOnlyCount: 0,  // 本地有而云端没有（未同步到云端）
-        cloudOnlyCount: 0,  // 云端有而本地没有（未更新到本地）
-        modifiedCount: 0    // 两边都有但内容不同（已修改）
-    };
-
-    if (!localBookmarks || !cloudBookmarks) {
-        if (!localBookmarks && cloudBookmarks) {
-            result.cloudOnlyCount = countBookmarks(cloudBookmarks);
-        } else if (localBookmarks && !cloudBookmarks) {
-            result.localOnlyCount = countBookmarks(localBookmarks);
-        }
-        return result;
-    }
-
-    // 构建本地书签的映射（用于查找）
-    const localMap = new Map();
-    buildBookmarkMap(localBookmarks, '', localMap);
-
-    // 构建云端书签的映射
-    const cloudMap = new Map();
-    buildBookmarkMap(cloudBookmarks, '', cloudMap);
-
-    // 计算本地有而云端没有的
-    for (const [key, localNode] of localMap) {
-        if (!cloudMap.has(key)) {
-            result.localOnlyCount++;
-        } else if (localNode.url && localNode.url !== cloudMap.get(key).url) {
-            result.modifiedCount++;
-        }
-    }
-
-    // 计算云端有而本地没有的
-    for (const [key, cloudNode] of cloudMap) {
-        if (!localMap.has(key)) {
-            result.cloudOnlyCount++;
-        }
-    }
-
-    return result;
-}
-
-// 构建书签映射（路径 + 标题 作为 key）
-function buildBookmarkMap(node, parentPath, map) {
-    const path = parentPath + '/' + node.title;
-    
-    if (node.url) {
-        // 书签节点
-        map.set(path, node);
-    }
-    
-    // 递归处理子节点
-    if (node.children) {
-        for (const child of node.children) {
-            buildBookmarkMap(child, path, map);
-        }
-    }
-}
+// countBookmarks / buildBookmarkMap / compareBookmarks 已抽取到 js/bookmark-diff.js，
+// 由 popup.html 通过 <script> 在本文件之前加载，作为全局函数调用。
 
 // 更新书签数量显示
 async function updateBookmarkCounts() {
