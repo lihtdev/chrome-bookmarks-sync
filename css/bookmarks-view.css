@@ -250,6 +250,21 @@ body {
     white-space: nowrap;
 }
 
+/* 文件夹包含的书签数量徽章（文件夹名内的内联子元素，紧贴标题文本） */
+.folder-count {
+    display: inline-block;
+    min-width: 20px;
+    padding: 1px 7px;
+    margin-left: 8px;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+    color: var(--text-secondary);
+    background: var(--bg-color-secondary, #eef0f3);
+    border-radius: 9px;
+    white-space: nowrap;
+}
+
 .tree-children {
     margin-left: 26px;
     padding-left: 8px;

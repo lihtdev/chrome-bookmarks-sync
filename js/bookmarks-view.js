@@ -216,6 +216,14 @@ function renderTreeNode(node, highlightKeyword = '') {
                 childrenContainer.classList.toggle('collapsed');
             });
         }
+
+        // 文件夹递归包含的书签总数徽章，紧贴标题文本右侧
+        const bookmarkCount = countBookmarks(node);
+        const countSpan = document.createElement('span');
+        countSpan.className = 'folder-count';
+        countSpan.textContent = bookmarkCount;
+        countSpan.title = `包含 ${bookmarkCount} 个书签`;
+        nameSpan.appendChild(countSpan);
     } else {
         nameSpan.className = 'bookmark-name';
         const link = document.createElement('a');
