@@ -11,8 +11,9 @@ let pendingSync = false;
 
 // 加载差异计数共享模块（countBookmarks/buildBookmarkMap/compareBookmarks），
 // 与 popup 共用同一份，保证同步消息里的变更数量与 popup 数量区口径一致。
-// importScripts 须在顶层调用；路径相对扩展根。
-importScripts('js/bookmark-diff.js');
+// importScripts 须在顶层调用；路径相对 service worker 所在目录(js/)，
+// background.js 与 bookmark-diff.js 同在 js/ 目录，故直接写文件名。
+importScripts('bookmark-diff.js');
 
 // 监听书签变化
 chrome.bookmarks.onCreated.addListener(() => {
