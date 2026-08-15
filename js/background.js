@@ -336,6 +336,7 @@ async function mergeCloudBookmarksToLocal(cloudBookmarks) {
         await mergeNodeChildren('1', cloudBookmarks.children, localBookmarksBar.children);
     } else if (cloudBookmarks.children && (!localBookmarksBar || !localBookmarksBar.children)) {
         // 本地书签栏为空，直接创建所有
+        //（按云端数组顺序依次追加创建即保序，无需重排）
         for (const child of cloudBookmarks.children) {
             await createBookmarkNode('1', child);
         }
@@ -345,6 +346,8 @@ async function mergeCloudBookmarksToLocal(cloudBookmarks) {
 }
 
 // 增量合并一组子节点
+// 分三个阶段：1) 匹配/更新/新建并记录目标顺序 2) 删除多余节点 3) 统一重排该层。
+// 云端 children 数组顺序是顺序的唯一来源（快照中的 index 字段可能过期，不使用）。
 async function mergeNodeChildren(parentId, cloudChildren, localChildren) {
     // 创建本地节点标题 → 节点列表 的映射（同一父节点下可能有同名节点，所以用数组）
     const localMap = new Map();
@@ -356,7 +359,11 @@ async function mergeNodeChildren(parentId, cloudChildren, localChildren) {
         localMap.get(key).push(localNode);
     }
 
-    // 处理云端每个节点
+    // 与 cloudChildren 一一对应的本地节点 id，作为该层重排的目标顺序
+    //（匹配成功的节点与新建的节点都纳入排序，解决新建节点只追加到末尾的问题）
+    const orderedLocalIds = [];
+
+    // 阶段 1：处理云端每个节点（匹配、内容更新、递归子节点、新建）
     for (const cloudNode of cloudChildren) {
         const key = normalizeKey(cloudNode.title);
         const matchingLocalNodes = localMap.get(key) || [];
@@ -379,33 +386,51 @@ async function mergeNodeChildren(parentId, cloudChildren, localChildren) {
                 });
             }
 
-            // 处理 index（排序位置）变化
-            if (localNode.index !== cloudNode.index) {
-                await chrome.bookmarks.move(localNode.id, {
-                    index: cloudNode.index
-                });
-            }
-
             // 递归合并子节点
             if (cloudNode.children && localNode.children) {
                 await mergeNodeChildren(localNode.id, cloudNode.children, localNode.children);
             } else if (cloudNode.children && (!localNode.children || localNode.children.length === 0)) {
                 // 本地没有子节点，云端有，全部创建
+                //（按云端数组顺序依次追加创建即保序，无需再重排）
                 for (const child of cloudNode.children) {
                     await createBookmarkNode(localNode.id, child);
                 }
             }
+
+            orderedLocalIds.push(localNode.id);
         } else {
-            // 云端有，本地没有 → 创建新节点
-            await createBookmarkNode(parentId, cloudNode);
+            // 云端有，本地没有 → 创建新节点（创建时追加到末尾，由阶段 3 统一归位）
+            const created = await createBookmarkNode(parentId, cloudNode);
+            orderedLocalIds.push(created.id);
         }
     }
 
-    // 删除本地有但云端没有的节点
+    // 阶段 2：删除本地有但云端没有的节点（先于重排执行，避免被删节点占位干扰）
     for (const [key, remainingNodes] of localMap) {
         for (const remainingNode of remainingNodes) {
             await chrome.bookmarks.removeTree(remainingNode.id);
         }
+    }
+
+    // 阶段 3：统一重排该层，使本地顺序与云端 children 数组顺序一致
+    await reorderChildren(parentId, orderedLocalIds);
+}
+
+// 按目标顺序重排某父节点下的子节点
+// 正确性：orderedIds 与云端 children 一一对应，阶段 2 删除后 parentId 下节点集合
+// 与 orderedIds 相同；按 i 递增 move 到 index i 只影响 >= i 的位置，
+// 已就位的 [0, i) 前缀不再变动，最终顺序与云端一致。
+async function reorderChildren(parentId, orderedIds) {
+    // 预检：实时顺序已与目标一致则跳过，避免无意义 move 及 onMoved 事件风暴
+    const currentChildren = await chrome.bookmarks.getChildren(parentId);
+    const sameOrder = currentChildren.length === orderedIds.length
+        && orderedIds.every((id, i) => id === currentChildren[i].id);
+    if (sameOrder) {
+        return;
+    }
+
+    for (let i = 0; i < orderedIds.length; i++) {
+        await chrome.bookmarks.move(orderedIds[i], { index: i });
     }
 }
 
